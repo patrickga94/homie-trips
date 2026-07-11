@@ -1,0 +1,22 @@
+# Fly.io config. Run `fly launch --no-deploy` first to claim an app name/region,
+# then reconcile this file, set secrets, and `fly deploy`. See README for details.
+app = "trip-app"            # change to your unique app name
+primary_region = "iad"      # pick a region near your Neon database
+
+[build]
+  dockerfile = "backend/Dockerfile"
+  # Uses the last (prod) stage of the multi-stage Dockerfile.
+
+[deploy]
+  release_command = "python manage.py migrate --noinput"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
