@@ -5,9 +5,10 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Flight, Trip, TripMembership
+from .models import Accommodation, Flight, Trip, TripMembership
 from .permissions import IsTripMember, IsTripOwner
 from .serializers import (
+    AccommodationSerializer,
     AddMemberSerializer,
     FlightSerializer,
     InvitationSerializer,
@@ -15,7 +16,7 @@ from .serializers import (
     TripListSerializer,
     TripSerializer,
 )
-from .services import add_member_by_email
+from .services import add_member_by_email, fetch_og_image
 
 
 class TripViewSet(viewsets.ModelViewSet):
@@ -92,9 +93,12 @@ class TripViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class FlightViewSet(viewsets.ModelViewSet):
-    serializer_class = FlightSerializer
-    permission_classes = [IsAuthenticated]
+class TripScopedMixin:
+    """Shared trip lookup for resources nested under /trips/<trip_pk>/.
+
+    Resolves the parent trip from the URL and enforces that the requester is a
+    member, for every action (list/retrieve included).
+    """
 
     def get_trip(self):
         if not hasattr(self, "_trip"):
@@ -104,10 +108,16 @@ class FlightViewSet(viewsets.ModelViewSet):
             self._trip = trip
         return self._trip
 
+    def perform_create(self, serializer):
+        serializer.save(trip=self.get_trip())
+
+
+class FlightViewSet(TripScopedMixin, viewsets.ModelViewSet):
+    serializer_class = FlightSerializer
+    permission_classes = [IsAuthenticated]
+
     def get_queryset(self):
-        # Enforces trip membership for every action (list/retrieve included).
-        trip = self.get_trip()
-        return trip.flights.prefetch_related("flight_travelers__user")
+        return self.get_trip().flights.prefetch_related("flight_travelers__user")
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -116,5 +126,28 @@ class FlightViewSet(viewsets.ModelViewSet):
             context["trip"] = self.get_trip()
         return context
 
+
+class AccommodationViewSet(TripScopedMixin, viewsets.ModelViewSet):
+    serializer_class = AccommodationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.get_trip().accommodations.all()
+
     def perform_create(self, serializer):
-        serializer.save(trip=self.get_trip())
+        instance = serializer.save(trip=self.get_trip())
+        self._maybe_fetch_image(instance)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        self._maybe_fetch_image(instance)
+
+    @staticmethod
+    def _maybe_fetch_image(instance):
+        # Best-effort: only auto-fill when there's a link and no image yet, so a
+        # manual photo URL (or an already-fetched one) is never overwritten.
+        if instance.link and not instance.image_url:
+            image = fetch_og_image(instance.link)
+            if image:
+                instance.image_url = image
+                instance.save(update_fields=["image_url"])

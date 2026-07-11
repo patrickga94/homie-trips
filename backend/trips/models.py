@@ -96,6 +96,32 @@ class Flight(models.Model):
         return f"{self.airline} {self.flight_number}".strip() or f"Flight {self.pk}"
 
 
+class Accommodation(models.Model):
+    """Where the group is staying for part or all of a trip (e.g. an Airbnb)."""
+
+    trip = models.ForeignKey(
+        Trip, on_delete=models.CASCADE, related_name="accommodations"
+    )
+    name = models.CharField(max_length=200)
+    address = models.CharField(max_length=300, blank=True)
+    beds = models.PositiveSmallIntegerField(null=True, blank=True)
+    link = models.URLField(blank=True)  # e.g. the Airbnb / VRBO listing
+    # Thumbnail, auto-filled from the link's og:image when possible (see
+    # services.fetch_og_image); can also be set manually. og:image URLs are
+    # often long/signed, hence the generous max_length.
+    image_url = models.URLField(max_length=1000, blank=True)
+    check_in = models.DateField(null=True, blank=True)
+    check_out = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["check_in", "id"]
+
+    def __str__(self):
+        return self.name
+
+
 class FlightTraveler(models.Model):
     """Through model: one traveler's booking details on a shared flight."""
 

@@ -31,12 +31,18 @@ export const useAuthStore = defineStore('auth', () => {
     return data
   }
 
-  async function register(email, password, displayName) {
+  async function register(email, password, preferredName) {
     const { data } = await client.post('/auth/register/', {
       email,
       password,
-      display_name: displayName || '',
+      preferred_name: preferredName || '',
     })
+    user.value = data
+    return data
+  }
+
+  async function updateProfile(payload) {
+    const { data } = await client.patch('/auth/me/', payload)
     user.value = data
     return data
   }
@@ -46,5 +52,5 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
   }
 
-  return { user, ready, isAuthenticated, init, login, register, logout }
+  return { user, ready, isAuthenticated, init, login, register, updateProfile, logout }
 })

@@ -144,13 +144,15 @@ fly ssh console -C "python manage.py createsuperuser"
 | POST | `/api/auth/register/` | Create account + log in |
 | POST | `/api/auth/login/` | Log in |
 | POST | `/api/auth/logout/` | Log out |
-| GET  | `/api/auth/me/` | Current user |
+| GET/PATCH | `/api/auth/me/` | Current user / update profile (name, dietary restrictions) |
 | GET/POST | `/api/trips/` | List / create trips |
 | GET/PUT/PATCH/DELETE | `/api/trips/{id}/` | Trip detail (delete = owner only) |
 | GET/POST | `/api/trips/{id}/members/` | List members+invites / add member by email |
 | DELETE | `/api/trips/{id}/members/{user_id}/` | Remove a member |
 | GET/POST | `/api/trips/{id}/flights/` | List / create flights |
 | GET/PUT/PATCH/DELETE | `/api/trips/{id}/flights/{id}/` | Flight detail |
+| GET/POST | `/api/trips/{id}/accommodations/` | List / create accommodations |
+| GET/PUT/PATCH/DELETE | `/api/trips/{id}/accommodations/{id}/` | Accommodation detail |
 
 All trip-scoped endpoints require authentication and trip membership.
 

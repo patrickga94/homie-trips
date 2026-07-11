@@ -4,7 +4,14 @@ from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
 
-from .models import Flight, FlightTraveler, Invitation, Trip, TripMembership
+from .models import (
+    Accommodation,
+    Flight,
+    FlightTraveler,
+    Invitation,
+    Trip,
+    TripMembership,
+)
 
 User = get_user_model()
 
@@ -75,6 +82,25 @@ class TripListSerializer(TripSerializer):
             "my_role",
             "member_count",
         ]
+
+
+class AccommodationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Accommodation
+        fields = [
+            "id",
+            "trip",
+            "name",
+            "address",
+            "beds",
+            "link",
+            "image_url",
+            "check_in",
+            "check_out",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = ["trip", "created_at"]
 
 
 class FlightTravelerSerializer(serializers.ModelSerializer):

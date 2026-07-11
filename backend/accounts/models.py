@@ -36,7 +36,10 @@ class User(AbstractUser):
 
     username = None
     email = models.EmailField("email address", unique=True)
-    display_name = models.CharField(max_length=150, blank=True)
+    # first_name / last_name are inherited from AbstractUser.
+    preferred_name = models.CharField(max_length=150, blank=True)
+    # A simple list of strings, e.g. ["vegetarian", "peanut allergy"].
+    dietary_restrictions = models.JSONField(default=list, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
@@ -48,4 +51,4 @@ class User(AbstractUser):
 
     @property
     def name(self):
-        return self.display_name or self.email.split("@")[0]
+        return self.preferred_name or self.first_name or self.email.split("@")[0]

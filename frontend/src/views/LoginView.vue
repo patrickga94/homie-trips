@@ -39,14 +39,14 @@ async function submit() {
           <label class="label">Password</label>
           <input v-model="password" type="password" class="input" required autocomplete="current-password" />
         </div>
-        <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
+        <p v-if="error" class="text-sm text-clay-600">{{ error }}</p>
         <button type="submit" class="btn-primary w-full" :disabled="submitting">
           {{ submitting ? 'Logging in…' : 'Log in' }}
         </button>
       </form>
-      <p class="mt-4 text-center text-sm text-gray-500">
+      <p class="mt-4 text-center text-sm text-stone-500">
         No account?
-        <RouterLink to="/register" class="text-indigo-600 hover:underline">Register</RouterLink>
+        <RouterLink to="/register" class="text-forest-600 hover:underline">Register</RouterLink>
       </p>
     </div>
   </div>

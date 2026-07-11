@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import Flight, FlightTraveler, Invitation, Trip, TripMembership
+from .models import (
+    Accommodation,
+    Flight,
+    FlightTraveler,
+    Invitation,
+    Trip,
+    TripMembership,
+)
 
 
 class TripMembershipInline(admin.TabularInline):
@@ -27,6 +34,13 @@ class FlightAdmin(admin.ModelAdmin):
     list_display = ["__str__", "trip", "departure_airport", "arrival_airport", "departure_time"]
     list_filter = ["trip"]
     inlines = [FlightTravelerInline]
+
+
+@admin.register(Accommodation)
+class AccommodationAdmin(admin.ModelAdmin):
+    list_display = ["name", "trip", "check_in", "check_out", "beds"]
+    list_filter = ["trip"]
+    search_fields = ["name", "address"]
 
 
 @admin.register(Invitation)

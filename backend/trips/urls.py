@@ -1,24 +1,36 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import FlightViewSet, TripViewSet
+from .views import AccommodationViewSet, FlightViewSet, TripViewSet
 
 router = DefaultRouter()
 router.register("trips", TripViewSet, basename="trip")
 
-flight_list = FlightViewSet.as_view({"get": "list", "post": "create"})
-flight_detail = FlightViewSet.as_view(
-    {
-        "get": "retrieve",
-        "put": "update",
-        "patch": "partial_update",
-        "delete": "destroy",
-    }
-)
+_list = {"get": "list", "post": "create"}
+_detail = {
+    "get": "retrieve",
+    "put": "update",
+    "patch": "partial_update",
+    "delete": "destroy",
+}
 
 urlpatterns = [
-    path("trips/<int:trip_pk>/flights/", flight_list, name="flight-list"),
-    path("trips/<int:trip_pk>/flights/<int:pk>/", flight_detail, name="flight-detail"),
+    path("trips/<int:trip_pk>/flights/", FlightViewSet.as_view(_list), name="flight-list"),
+    path(
+        "trips/<int:trip_pk>/flights/<int:pk>/",
+        FlightViewSet.as_view(_detail),
+        name="flight-detail",
+    ),
+    path(
+        "trips/<int:trip_pk>/accommodations/",
+        AccommodationViewSet.as_view(_list),
+        name="accommodation-list",
+    ),
+    path(
+        "trips/<int:trip_pk>/accommodations/<int:pk>/",
+        AccommodationViewSet.as_view(_detail),
+        name="accommodation-detail",
+    ),
 ]
 
 urlpatterns += router.urls

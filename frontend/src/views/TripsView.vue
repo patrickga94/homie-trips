@@ -64,7 +64,7 @@ async function createTrip() {
           <input v-model="form.end_date" type="date" class="input" />
         </div>
         <div class="sm:col-span-2">
-          <p v-if="error" class="mb-2 text-sm text-red-600">{{ error }}</p>
+          <p v-if="error" class="mb-2 text-sm text-clay-600">{{ error }}</p>
           <button type="submit" class="btn-primary" :disabled="saving">
             {{ saving ? 'Saving…' : 'Create trip' }}
           </button>
@@ -72,8 +72,8 @@ async function createTrip() {
       </form>
     </div>
 
-    <p v-if="store.loading" class="text-gray-500">Loading…</p>
-    <p v-else-if="!store.trips.length" class="text-gray-500">
+    <p v-if="store.loading" class="text-stone-500">Loading…</p>
+    <p v-else-if="!store.trips.length" class="text-stone-500">
       No trips yet. Create your first one!
     </p>
 
@@ -82,19 +82,19 @@ async function createTrip() {
         v-for="trip in store.trips"
         :key="trip.id"
         :to="{ name: 'trip-detail', params: { id: trip.id } }"
-        class="card block transition hover:border-indigo-300 hover:shadow"
+        class="card block transition hover:border-forest-300 hover:shadow"
       >
         <div class="flex items-start justify-between">
           <h2 class="text-lg font-medium">{{ trip.name }}</h2>
-          <span class="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">
+          <span class="rounded-full bg-forest-50 px-2 py-0.5 text-xs text-forest-700">
             {{ trip.my_role }}
           </span>
         </div>
-        <p v-if="trip.destination" class="text-sm text-gray-600">📍 {{ trip.destination }}</p>
-        <p v-if="trip.start_date" class="text-sm text-gray-500">
+        <p v-if="trip.destination" class="text-sm text-stone-600">📍 {{ trip.destination }}</p>
+        <p v-if="trip.start_date" class="text-sm text-stone-500">
           {{ trip.start_date }} <span v-if="trip.end_date">→ {{ trip.end_date }}</span>
         </p>
-        <p class="mt-2 text-xs text-gray-400">{{ trip.member_count }} member(s)</p>
+        <p class="mt-2 text-xs text-stone-400">{{ trip.member_count }} member(s)</p>
       </RouterLink>
     </div>
   </div>
