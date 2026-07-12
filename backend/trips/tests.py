@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -12,6 +13,8 @@ User = get_user_model()
 
 class TripApiTests(APITestCase):
     def setUp(self):
+        # Reset throttle counters so rate limits don't leak across tests.
+        cache.clear()
         self.alice = User.objects.create_user(email="alice@example.com", password="pw-alice-123")
         self.bob = User.objects.create_user(email="bob@example.com", password="pw-bob-1234")
 
@@ -151,6 +154,21 @@ class TripApiTests(APITestCase):
         self.assertEqual(resp.data["travelers"][0]["seat"], "2C")
         self.assertEqual(Flight.objects.get(pk=fid).travelers.count(), 1)
 
+    def test_flight_direction_defaults_and_persists(self):
+        trip = Trip.objects.create(name="Directions", created_by=self.alice)
+        TripMembership.objects.create(trip=trip, user=self.alice, role="owner")
+        self.client.force_login(self.alice)
+
+        r1 = self.client.post(f"/api/trips/{trip.id}/flights/", {"airline": "UA"}, format="json")
+        self.assertEqual(r1.data["direction"], "arrival")  # default
+
+        r2 = self.client.post(
+            f"/api/trips/{trip.id}/flights/",
+            {"airline": "DL", "direction": "departure"},
+            format="json",
+        )
+        self.assertEqual(r2.data["direction"], "departure")
+
     def test_flight_traveler_must_be_trip_member(self):
         trip = Trip.objects.create(name="NYC", created_by=self.alice)
         TripMembership.objects.create(trip=trip, user=self.alice, role="owner")
@@ -244,6 +262,17 @@ class TripApiTests(APITestCase):
         self.assertEqual(fetch_og_image("http://localhost/x"), "")
         self.assertEqual(fetch_og_image("http://169.254.169.254/latest/meta-data/"), "")
         self.assertEqual(fetch_og_image("ftp://example.com/file"), "")
+
+    def test_login_is_rate_limited(self):
+        # 'login' scope allows 10/min; the 11th attempt from the same client is
+        # throttled (429), which blunts password brute-forcing.
+        payload = {"email": "alice@example.com", "password": "wrong-password"}
+        codes = [
+            self.client.post("/api/auth/login/", payload, format="json").status_code
+            for _ in range(11)
+        ]
+        self.assertEqual(codes[0], status.HTTP_400_BAD_REQUEST)
+        self.assertIn(status.HTTP_429_TOO_MANY_REQUESTS, codes)
 
     def test_authentication_required(self):
         resp = self.client.get("/api/trips/")

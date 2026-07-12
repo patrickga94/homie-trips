@@ -76,7 +76,14 @@ class Invitation(models.Model):
 class Flight(models.Model):
     """A single flight leg. Multiple travelers can share one flight record."""
 
+    class Direction(models.TextChoices):
+        ARRIVAL = "arrival", "Arrival"  # getting to the trip
+        DEPARTURE = "departure", "Departure"  # heading home
+
     trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="flights")
+    direction = models.CharField(
+        max_length=10, choices=Direction.choices, default=Direction.ARRIVAL
+    )
     airline = models.CharField(max_length=100, blank=True)
     flight_number = models.CharField(max_length=20, blank=True)
     departure_airport = models.CharField(max_length=10, blank=True)

@@ -2,6 +2,7 @@
 
 12-factor configuration via environment variables (see .env.example).
 """
+import sys
 from pathlib import Path
 
 import dj_database_url
@@ -70,8 +71,19 @@ DATABASES = {
     "default": dj_database_url.parse(
         env("DATABASE_URL", default="postgres://trip:trip@localhost:5432/trip_app"),
         conn_max_age=600,
+        # Neon free tier scales to zero when idle; health checks make Django
+        # reconnect on a dropped connection instead of erroring after a wake-up.
+        conn_health_checks=True,
     )
 }
+
+# Safety net: never run the test suite against the configured database (which
+# may point at production). `manage.py test` always uses a local Postgres,
+# overridable with TEST_DATABASE_URL.
+if "test" in sys.argv:
+    DATABASES["default"] = dj_database_url.parse(
+        env("TEST_DATABASE_URL", default="postgres://trip:trip@localhost:5432/trip_app")
+    )
 
 AUTH_USER_MODEL = "accounts.User"
 
@@ -113,6 +125,11 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # Applied only to views that opt in via throttle_scope (login / register).
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "10/min",
+        "register": "20/hour",
+    },
 }
 
 # --- Session / CSRF cookies ---------------------------------------------------
@@ -130,3 +147,6 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
+    # Trust exactly one proxy (Fly.io) when identifying the client IP for
+    # throttling, so the limiter keys on the real client, not a spoofable header.
+    REST_FRAMEWORK["NUM_PROXIES"] = 1

@@ -120,6 +120,7 @@ class FlightSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "trip",
+            "direction",
             "airline",
             "flight_number",
             "departure_airport",

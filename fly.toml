@@ -1,22 +1,26 @@
-# Fly.io config. Run `fly launch --no-deploy` first to claim an app name/region,
-# then reconcile this file, set secrets, and `fly deploy`. See README for details.
-app = "trip-app"            # change to your unique app name
-primary_region = "iad"      # pick a region near your Neon database
+# fly.toml app configuration file generated for homie-trips on 2026-07-12T10:30:30-05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'homie-trips'
+primary_region = 'iad'
 
 [build]
-  dockerfile = "backend/Dockerfile"
-  # Uses the last (prod) stage of the multi-stage Dockerfile.
+  dockerfile = 'backend/Dockerfile'
 
 [deploy]
-  release_command = "python manage.py migrate --noinput"
+  release_command = 'python manage.py migrate --noinput'
 
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+  size = 'shared-cpu-1x'
+  memory = '256mb'
+  cpus = 1
+  memory_mb = 256

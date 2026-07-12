@@ -97,8 +97,40 @@ const flightError = ref('')
 const flightForm = ref(blankFlightForm())
 const travelerRows = ref([])
 
+const flightGroups = computed(() =>
+  [
+    { key: 'arrival', label: 'Arrival', flights: flights.value.filter((f) => f.direction === 'arrival') },
+    { key: 'departure', label: 'Departure', flights: flights.value.filter((f) => f.direction === 'departure') },
+  ].filter((g) => g.flights.length),
+)
+
+// Per-person view: each member's arrival + departure flights (for "who's
+// flying when"), sorted by soonest arrival. Members with no flights still
+// appear, showing "—", and fall to the bottom.
+const flightSummary = computed(() => {
+  const rows = members.value.map((m) => {
+    const mine = flights.value.filter((f) => f.travelers?.some((t) => t.user === m.user.id))
+    return {
+      userId: m.user.id,
+      name: m.user.name,
+      arrivals: mine.filter((f) => f.direction === 'arrival'),
+      departures: mine.filter((f) => f.direction === 'departure'),
+    }
+  })
+  const arrivalKey = (p) => {
+    const times = p.arrivals
+      .map((f) => f.departure_time)
+      .filter(Boolean)
+      .map((t) => new Date(t).getTime())
+    return times.length ? Math.min(...times) : Infinity
+  }
+  // Array.sort is stable, so people without arrivals keep membership order.
+  return rows.sort((a, b) => arrivalKey(a) - arrivalKey(b))
+})
+
 function blankFlightForm() {
   return {
+    direction: 'arrival',
     airline: '',
     flight_number: '',
     departure_airport: '',
@@ -143,6 +175,7 @@ function openAddFlight() {
 
 function openEditFlight(f) {
   flightForm.value = {
+    direction: f.direction || 'arrival',
     airline: f.airline || '',
     flight_number: f.flight_number || '',
     departure_airport: f.departure_airport || '',
@@ -166,6 +199,7 @@ async function saveFlight() {
   flightError.value = ''
   const f = flightForm.value
   const payload = {
+    direction: f.direction,
     airline: f.airline,
     flight_number: f.flight_number,
     departure_airport: f.departure_airport,
@@ -299,6 +333,16 @@ function fmt(dt) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function flightLabel(f) {
+  const airline = [f.airline, f.flight_number].filter(Boolean).join(' ')
+  const route =
+    f.departure_airport && f.arrival_airport
+      ? `${f.departure_airport}→${f.arrival_airport}`
+      : ''
+  const when = f.departure_time ? fmt(f.departure_time) : ''
+  return [airline, route, when].filter(Boolean).join(' · ') || 'flight added'
 }
 </script>
 
@@ -544,6 +588,27 @@ function fmt(dt) {
       <div v-if="showFlightForm" class="card">
         <h3 class="mb-4 font-medium">{{ editingFlightId ? 'Edit flight' : 'Add flight' }}</h3>
         <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="saveFlight">
+          <div class="sm:col-span-2">
+            <label class="label">Type</label>
+            <div class="flex gap-2">
+              <label
+                v-for="opt in [
+                  { v: 'arrival', label: 'Arrival' },
+                  { v: 'departure', label: 'Departure' },
+                ]"
+                :key="opt.v"
+                class="flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-md border text-sm"
+                :class="
+                  flightForm.direction === opt.v
+                    ? 'border-forest-500 bg-forest-50 font-medium text-forest-800'
+                    : 'border-stone-300 text-stone-600'
+                "
+              >
+                <input v-model="flightForm.direction" type="radio" class="sr-only" :value="opt.v" />
+                {{ opt.label }}
+              </label>
+            </div>
+          </div>
           <div>
             <label class="label">Airline</label>
             <input v-model="flightForm.airline" class="input" placeholder="United" />
@@ -601,9 +666,35 @@ function fmt(dt) {
         </form>
       </div>
 
+      <div v-if="flights.length" class="card">
+        <h3 class="mb-3 font-medium">Who's flying when</h3>
+        <ul class="space-y-3">
+          <li v-for="p in flightSummary" :key="p.userId">
+            <p class="text-sm font-medium">{{ p.name }}</p>
+            <div class="mt-0.5 space-y-0.5 text-sm text-stone-600">
+              <p>
+                <span class="text-stone-400">Arrival:</span>
+                <span v-if="p.arrivals.length"> {{ p.arrivals.map(flightLabel).join('; ') }}</span>
+                <span v-else class="text-stone-400"> —</span>
+              </p>
+              <p>
+                <span class="text-stone-400">Departure:</span>
+                <span v-if="p.departures.length"> {{ p.departures.map(flightLabel).join('; ') }}</span>
+                <span v-else class="text-stone-400"> —</span>
+              </p>
+            </div>
+          </li>
+        </ul>
+      </div>
+
       <p v-if="!flights.length" class="text-stone-500">No flights added yet.</p>
-      <ul v-else class="space-y-3">
-        <li v-for="f in flights" :key="f.id" class="card">
+      <div v-else class="space-y-5">
+        <div v-for="group in flightGroups" :key="group.key">
+          <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-500">
+            {{ group.label }}
+          </h3>
+          <ul class="space-y-3">
+            <li v-for="f in group.flights" :key="f.id" class="card">
           <div class="flex items-start justify-between">
             <div>
               <p class="font-medium">
@@ -640,8 +731,10 @@ function fmt(dt) {
               </button>
             </div>
           </div>
-        </li>
-      </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
     </section>
   </div>
 </template>
