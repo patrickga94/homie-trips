@@ -12,6 +12,7 @@ from .models import (
     Invitation,
     ItineraryItem,
     Meal,
+    PointOfInterest,
     RentalVehicle,
     Trip,
     TripMembership,
@@ -26,6 +27,7 @@ from .serializers import (
     ItineraryItemSerializer,
     MealSerializer,
     MembershipSerializer,
+    PointOfInterestSerializer,
     RentalVehicleSerializer,
     TripListSerializer,
     TripSerializer,
@@ -201,6 +203,22 @@ class GroceryItemViewSet(TripScopedMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         return self.get_trip().grocery_items.all()
+
+
+class PointOfInterestViewSet(TripScopedMixin, viewsets.ModelViewSet):
+    serializer_class = PointOfInterestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.get_trip().pois.prefetch_related("interested")
+
+    def toggle_interest(self, request, *args, **kwargs):
+        poi = self.get_object()
+        if poi.interested.filter(pk=request.user.pk).exists():
+            poi.interested.remove(request.user)
+        else:
+            poi.interested.add(request.user)
+        return Response(self.get_serializer(poi).data)
 
 
 class MealViewSet(TripScopedMixin, viewsets.ModelViewSet):

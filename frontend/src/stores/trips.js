@@ -175,6 +175,31 @@ export const useTripsStore = defineStore('trips', () => {
     await client.delete(`/trips/${tripId}/grocery/${itemId}/`)
   }
 
+  // --- points of interest ---
+  async function fetchPois(tripId) {
+    const { data } = await client.get(`/trips/${tripId}/pois/`)
+    return Array.isArray(data) ? data : data.results
+  }
+
+  async function createPoi(tripId, payload) {
+    const { data } = await client.post(`/trips/${tripId}/pois/`, payload)
+    return data
+  }
+
+  async function updatePoi(tripId, poiId, payload) {
+    const { data } = await client.patch(`/trips/${tripId}/pois/${poiId}/`, payload)
+    return data
+  }
+
+  async function deletePoi(tripId, poiId) {
+    await client.delete(`/trips/${tripId}/pois/${poiId}/`)
+  }
+
+  async function togglePoiInterest(tripId, poiId) {
+    const { data } = await client.post(`/trips/${tripId}/pois/${poiId}/toggle_interest/`)
+    return data
+  }
+
   return {
     trips,
     loading,
@@ -211,5 +236,10 @@ export const useTripsStore = defineStore('trips', () => {
     createGroceryItem,
     updateGroceryItem,
     deleteGroceryItem,
+    fetchPois,
+    createPoi,
+    updatePoi,
+    deletePoi,
+    togglePoiInterest,
   }
 })

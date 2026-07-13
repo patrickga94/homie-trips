@@ -8,6 +8,7 @@ from .models import (
     Invitation,
     ItineraryItem,
     Meal,
+    PointOfInterest,
     RentalVehicle,
     Trip,
     TripMembership,
@@ -52,6 +53,14 @@ class ItineraryItemAdmin(admin.ModelAdmin):
     list_display = ["title", "trip", "day", "start_time"]
     list_filter = ["trip"]
     search_fields = ["title", "location"]
+
+
+@admin.register(PointOfInterest)
+class PointOfInterestAdmin(admin.ModelAdmin):
+    list_display = ["name", "trip", "category"]
+    list_filter = ["trip", "category"]
+    search_fields = ["name", "address"]
+    autocomplete_fields = ["interested"]
 
 
 @admin.register(GroceryItem)

@@ -386,6 +386,31 @@ class TripApiTests(APITestCase):
         blocked = self.client.get(f"/api/trips/{trip.id}/grocery/")
         self.assertEqual(blocked.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_poi_crud_and_interest_toggle(self):
+        trip = Trip.objects.create(name="Explore", created_by=self.alice)
+        TripMembership.objects.create(trip=trip, user=self.alice, role="owner")
+        self.client.force_login(self.alice)
+        created = self.client.post(
+            f"/api/trips/{trip.id}/pois/",
+            {"name": "Taco Stand", "category": "restaurant", "address": "Moab, UT"},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+        self.assertEqual(created.data["interested_count"], 0)
+        self.assertFalse(created.data["is_interested"])
+        poi_id = created.data["id"]
+
+        # Toggle interest on.
+        on = self.client.post(f"/api/trips/{trip.id}/pois/{poi_id}/toggle_interest/")
+        self.assertEqual(on.status_code, status.HTTP_200_OK)
+        self.assertTrue(on.data["is_interested"])
+        self.assertEqual(on.data["interested_count"], 1)
+
+        # Toggle back off.
+        off = self.client.post(f"/api/trips/{trip.id}/pois/{poi_id}/toggle_interest/")
+        self.assertEqual(off.data["interested_count"], 0)
+        self.assertFalse(off.data["is_interested"])
+
     def test_authentication_required(self):
         resp = self.client.get("/api/trips/")
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)

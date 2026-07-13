@@ -153,11 +153,17 @@ fly ssh console -C "python manage.py createsuperuser"
 | GET/PUT/PATCH/DELETE | `/api/trips/{id}/flights/{id}/` | Flight detail |
 | GET/POST | `/api/trips/{id}/accommodations/` | List / create accommodations |
 | GET/PUT/PATCH/DELETE | `/api/trips/{id}/accommodations/{id}/` | Accommodation detail |
+| GET/POST · detail | `/api/trips/{id}/rentals/[{id}/]` | Rental vehicles (with `rented_by` member) |
+| GET/POST · detail | `/api/trips/{id}/itinerary/[{id}/]` | Itinerary items (day-by-day) |
+| GET/POST · detail | `/api/trips/{id}/meals/[{id}/]` | Meals (cooks, ingredients) |
+| GET/POST · detail | `/api/trips/{id}/grocery/[{id}/]` | Grocery list items (checkable) |
+| GET/POST · detail | `/api/trips/{id}/pois/[{id}/]` | Points of interest |
+| POST | `/api/trips/{id}/pois/{id}/toggle_interest/` | Toggle the current user's interest |
 
 All trip-scoped endpoints require authentication and trip membership.
 
-## Roadmap (planned)
+## Feature areas
 
-- Itineraries (day-by-day schedule)
-- Grocery lists & meal plans
-- Points of interest
+Trips group content under **Members**, plus **Logistics** (accommodations, flights,
+rental vehicles) and **Activities** (itinerary, points of interest, meal plans that
+reference members' dietary restrictions, and a shared grocery list) tabs.

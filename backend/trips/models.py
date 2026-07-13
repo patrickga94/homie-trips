@@ -228,6 +228,38 @@ class GroceryItem(models.Model):
         return self.name
 
 
+class PointOfInterest(models.Model):
+    """A spot the group might want to check out (not a scheduled itinerary item)."""
+
+    class Category(models.TextChoices):
+        RESTAURANT = "restaurant", "Restaurant"
+        SHOPPING = "shopping", "Shopping"
+        ACTIVITY = "activity", "Activity"
+        SIGHTSEEING = "sightseeing", "Sightseeing"
+        OUTDOORS = "outdoors", "Outdoors"
+        NIGHTLIFE = "nightlife", "Nightlife"
+        OTHER = "other", "Other"
+
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="pois")
+    name = models.CharField(max_length=200)
+    category = models.CharField(
+        max_length=20, choices=Category.choices, default=Category.OTHER
+    )
+    address = models.CharField(max_length=300, blank=True)
+    link = models.URLField(blank=True)
+    notes = models.TextField(blank=True)
+    interested = models.ManyToManyField(
+        User, related_name="interested_pois", blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return self.name
+
+
 class FlightTraveler(models.Model):
     """Through model: one traveler's booking details on a shared flight."""
 

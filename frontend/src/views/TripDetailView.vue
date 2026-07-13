@@ -20,6 +20,7 @@ const flights = ref([])
 const accommodations = ref([])
 const rentals = ref([])
 const itinerary = ref([])
+const pois = ref([])
 const meals = ref([])
 const grocery = ref([])
 const loading = ref(true)
@@ -84,6 +85,7 @@ async function loadAll() {
     accommodations.value = await store.fetchAccommodations(props.id)
     rentals.value = await store.fetchRentals(props.id)
     itinerary.value = await store.fetchItinerary(props.id)
+    pois.value = await store.fetchPois(props.id)
     meals.value = await store.fetchMeals(props.id)
     grocery.value = await store.fetchGrocery(props.id)
   } finally {
@@ -537,6 +539,86 @@ function itinTimeRange(it) {
   const e = fmtTime(it.end_time)
   if (s && e) return `${s} – ${e}`
   return s || e || ''
+}
+
+// --- points of interest ---
+const POI_CATEGORIES = [
+  { v: 'restaurant', label: 'Restaurant' },
+  { v: 'shopping', label: 'Shopping' },
+  { v: 'activity', label: 'Activity' },
+  { v: 'sightseeing', label: 'Sightseeing' },
+  { v: 'outdoors', label: 'Outdoors' },
+  { v: 'nightlife', label: 'Nightlife' },
+  { v: 'other', label: 'Other' },
+]
+function poiCategoryLabel(v) {
+  return POI_CATEGORIES.find((c) => c.v === v)?.label || v
+}
+
+const showPoiForm = ref(false)
+const editingPoiId = ref(null)
+const poiError = ref('')
+const poiForm = ref(blankPoiForm())
+
+function blankPoiForm() {
+  return { name: '', category: 'other', address: '', link: '', notes: '' }
+}
+
+// Most-wanted spots float to the top.
+const poisSorted = computed(() =>
+  [...pois.value].sort((a, b) => b.interested_count - a.interested_count),
+)
+
+function openAddPoi() {
+  poiForm.value = blankPoiForm()
+  editingPoiId.value = null
+  poiError.value = ''
+  showPoiForm.value = true
+}
+
+function openEditPoi(p) {
+  poiForm.value = {
+    name: p.name || '',
+    category: p.category || 'other',
+    address: p.address || '',
+    link: p.link || '',
+    notes: p.notes || '',
+  }
+  editingPoiId.value = p.id
+  poiError.value = ''
+  showPoiForm.value = true
+}
+
+function closePoiForm() {
+  showPoiForm.value = false
+  editingPoiId.value = null
+}
+
+async function savePoi() {
+  poiError.value = ''
+  try {
+    if (editingPoiId.value) {
+      await store.updatePoi(props.id, editingPoiId.value, poiForm.value)
+    } else {
+      await store.createPoi(props.id, poiForm.value)
+    }
+    closePoiForm()
+    pois.value = await store.fetchPois(props.id)
+  } catch (e) {
+    poiError.value = e.response?.data?.name?.[0] || e.response?.data?.detail || 'Could not save.'
+  }
+}
+
+async function removePoi(poiId) {
+  if (!confirm('Delete this place?')) return
+  await store.deletePoi(props.id, poiId)
+  pois.value = await store.fetchPois(props.id)
+}
+
+async function toggleInterest(poi) {
+  const updated = await store.togglePoiInterest(props.id, poi.id)
+  const idx = pois.value.findIndex((p) => p.id === poi.id)
+  if (idx !== -1) pois.value[idx] = updated
 }
 
 // --- meals ---
@@ -998,6 +1080,118 @@ function flightLabel(f) {
           </ul>
         </div>
       </div>
+    </section>
+
+    <!-- Places of interest -->
+    <section class="panel space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-medium">Places of interest</h2>
+        <button class="btn-secondary" @click="showPoiForm ? closePoiForm() : openAddPoi()">
+          {{ showPoiForm ? 'Cancel' : 'Add place' }}
+        </button>
+      </div>
+
+      <div v-if="showPoiForm" class="card">
+        <h3 class="mb-4 font-medium">{{ editingPoiId ? 'Edit place' : 'Add place' }}</h3>
+        <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="savePoi">
+          <div>
+            <label class="label">Name</label>
+            <input v-model="poiForm.name" class="input" required placeholder="Milt's Stop & Eat" />
+          </div>
+          <div>
+            <label class="label">Category</label>
+            <select v-model="poiForm.category" class="input">
+              <option v-for="c in POI_CATEGORIES" :key="c.v" :value="c.v">{{ c.label }}</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Address</label>
+            <input v-model="poiForm.address" class="input" placeholder="Moab, UT" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Link (optional)</label>
+            <input v-model="poiForm.link" type="url" class="input" placeholder="https://…" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Notes</label>
+            <textarea v-model="poiForm.notes" rows="2" class="input"></textarea>
+          </div>
+          <p v-if="poiError" class="text-sm text-clay-600 sm:col-span-2">{{ poiError }}</p>
+          <div class="flex flex-col gap-2 sm:col-span-2 sm:flex-row">
+            <button type="submit" class="btn-primary">
+              {{ editingPoiId ? 'Save changes' : 'Add place' }}
+            </button>
+            <button type="button" class="btn-secondary" @click="closePoiForm">Cancel</button>
+          </div>
+        </form>
+      </div>
+
+      <p v-if="!pois.length" class="text-stone-500">No places added yet.</p>
+      <ul v-else class="space-y-3">
+        <li
+          v-for="p in poisSorted"
+          :key="p.id"
+          class="card group"
+          @click="toggleCard('poi:' + p.id, $event)"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="font-medium">{{ p.name }}</p>
+                <span class="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600">
+                  {{ poiCategoryLabel(p.category) }}
+                </span>
+              </div>
+              <a
+                v-if="p.address"
+                :href="mapsUrl(p.address)"
+                target="_blank"
+                rel="noopener"
+                class="block text-sm text-forest-600 hover:underline"
+                >📍 {{ p.address }} <span class="text-stone-400">(open in maps ↗)</span></a
+              >
+              <a
+                v-if="p.link"
+                :href="p.link"
+                target="_blank"
+                rel="noopener"
+                class="block text-sm text-forest-600 hover:underline"
+                >View link ↗</a
+              >
+              <ClampText v-if="p.notes" :text="p.notes" class="mt-1" />
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  class="inline-flex min-h-[36px] items-center gap-1 rounded-full px-3 text-sm font-medium transition"
+                  :class="
+                    p.is_interested
+                      ? 'bg-forest-600 text-white hover:bg-forest-500'
+                      : 'border border-stone-300 text-stone-600 hover:bg-stone-100'
+                  "
+                  @click="toggleInterest(p)"
+                >
+                  {{ p.is_interested ? 'Interested' : "I'm interested" }}
+                  <span v-if="p.interested_count">· {{ p.interested_count }}</span>
+                </button>
+                <span v-if="p.interested_names.length" class="text-xs text-stone-500">
+                  {{ p.interested_names.join(', ') }}
+                </span>
+              </div>
+            </div>
+            <div
+              class="card-actions flex shrink-0 flex-col items-end gap-2"
+              :class="{ 'is-revealed': activeCard === 'poi:' + p.id }"
+            >
+              <button class="btn-icon" aria-label="Edit place" title="Edit place" @click="openEditPoi(p)">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                </svg>
+              </button>
+              <button class="btn-icon-danger" aria-label="Delete place" title="Delete place" @click="removePoi(p.id)">×</button>
+            </div>
+          </div>
+        </li>
+      </ul>
     </section>
 
     <!-- Meal plan -->

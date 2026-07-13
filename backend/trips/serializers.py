@@ -12,6 +12,7 @@ from .models import (
     Invitation,
     ItineraryItem,
     Meal,
+    PointOfInterest,
     RentalVehicle,
     Trip,
     TripMembership,
@@ -123,6 +124,41 @@ class ItineraryItemSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["trip", "created_at"]
+
+
+class PointOfInterestSerializer(serializers.ModelSerializer):
+    interested_count = serializers.SerializerMethodField()
+    interested_names = serializers.SerializerMethodField()
+    is_interested = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PointOfInterest
+        fields = [
+            "id",
+            "trip",
+            "name",
+            "category",
+            "address",
+            "link",
+            "notes",
+            "interested_count",
+            "interested_names",
+            "is_interested",
+            "created_at",
+        ]
+        read_only_fields = ["trip", "created_at"]
+
+    def get_interested_count(self, obj):
+        return len(obj.interested.all())
+
+    def get_interested_names(self, obj):
+        return [u.name for u in obj.interested.all()]
+
+    def get_is_interested(self, obj):
+        request = self.context.get("request")
+        if not request:
+            return False
+        return any(u.id == request.user.id for u in obj.interested.all())
 
 
 class GroceryItemSerializer(serializers.ModelSerializer):

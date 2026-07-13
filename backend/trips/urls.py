@@ -7,6 +7,7 @@ from .views import (
     GroceryItemViewSet,
     ItineraryItemViewSet,
     MealViewSet,
+    PointOfInterestViewSet,
     RentalVehicleViewSet,
     TripViewSet,
 )
@@ -66,6 +67,17 @@ urlpatterns = [
         "trips/<int:trip_pk>/grocery/<int:pk>/",
         GroceryItemViewSet.as_view(_detail),
         name="grocery-detail",
+    ),
+    path("trips/<int:trip_pk>/pois/", PointOfInterestViewSet.as_view(_list), name="poi-list"),
+    path(
+        "trips/<int:trip_pk>/pois/<int:pk>/",
+        PointOfInterestViewSet.as_view(_detail),
+        name="poi-detail",
+    ),
+    path(
+        "trips/<int:trip_pk>/pois/<int:pk>/toggle_interest/",
+        PointOfInterestViewSet.as_view({"post": "toggle_interest"}),
+        name="poi-toggle-interest",
     ),
 ]
 
