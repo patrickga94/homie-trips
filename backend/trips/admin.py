@@ -4,7 +4,11 @@ from .models import (
     Accommodation,
     Flight,
     FlightTraveler,
+    GroceryItem,
     Invitation,
+    ItineraryItem,
+    Meal,
+    RentalVehicle,
     Trip,
     TripMembership,
 )
@@ -41,6 +45,35 @@ class AccommodationAdmin(admin.ModelAdmin):
     list_display = ["name", "trip", "check_in", "check_out", "beds"]
     list_filter = ["trip"]
     search_fields = ["name", "address"]
+
+
+@admin.register(ItineraryItem)
+class ItineraryItemAdmin(admin.ModelAdmin):
+    list_display = ["title", "trip", "day", "start_time"]
+    list_filter = ["trip"]
+    search_fields = ["title", "location"]
+
+
+@admin.register(GroceryItem)
+class GroceryItemAdmin(admin.ModelAdmin):
+    list_display = ["name", "trip", "quantity", "category", "is_checked"]
+    list_filter = ["trip", "is_checked"]
+    search_fields = ["name"]
+
+
+@admin.register(RentalVehicle)
+class RentalVehicleAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "trip", "pickup_time", "dropoff_time"]
+    list_filter = ["trip"]
+    search_fields = ["company", "vehicle"]
+
+
+@admin.register(Meal)
+class MealAdmin(admin.ModelAdmin):
+    list_display = ["title", "trip", "day", "meal_type"]
+    list_filter = ["trip", "meal_type"]
+    search_fields = ["title"]
+    autocomplete_fields = ["cooks"]
 
 
 @admin.register(Invitation)

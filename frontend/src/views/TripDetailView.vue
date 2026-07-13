@@ -4,6 +4,9 @@ import { useRouter } from 'vue-router'
 import { useTripsStore } from '../stores/trips'
 import { useAuthStore } from '../stores/auth'
 import AirportPicker from '../components/AirportPicker.vue'
+import ClampText from '../components/ClampText.vue'
+import Accordion from '../components/Accordion.vue'
+import yhoshuaImg from '../assets/yhoshua.jpeg'
 
 const props = defineProps({ id: { type: [String, Number], required: true } })
 const store = useTripsStore()
@@ -15,10 +18,29 @@ const members = ref([])
 const pendingInvites = ref([])
 const flights = ref([])
 const accommodations = ref([])
+const rentals = ref([])
+const itinerary = ref([])
+const meals = ref([])
+const grocery = ref([])
 const loading = ref(true)
 const notice = ref('')
 
 const isOwner = computed(() => trip.value?.my_role === 'owner')
+
+// Reveal a card/row's action buttons on tap (mobile). Desktop uses CSS hover.
+// Only one card is "open" at a time; taps on links/buttons inside are ignored.
+const activeTab = ref('logistics')
+const TABS = [
+  { k: 'logistics', label: 'Logistics' },
+  { k: 'activities', label: 'Activities' },
+  { k: 'yhoshua', label: "Picture of Y'hoshua" },
+]
+
+const activeCard = ref(null)
+function toggleCard(key, event) {
+  if (event.target.closest('a, button, input, textarea, label, select')) return
+  activeCard.value = activeCard.value === key ? null : key
+}
 
 // --- edit trip ---
 const editing = ref(false)
@@ -60,6 +82,10 @@ async function loadAll() {
     pendingInvites.value = memberData.pending_invitations
     flights.value = await store.fetchFlights(props.id)
     accommodations.value = await store.fetchAccommodations(props.id)
+    rentals.value = await store.fetchRentals(props.id)
+    itinerary.value = await store.fetchItinerary(props.id)
+    meals.value = await store.fetchMeals(props.id)
+    grocery.value = await store.fetchGrocery(props.id)
   } finally {
     loading.value = false
   }
@@ -87,6 +113,12 @@ async function invite() {
 async function removeMember(userId) {
   if (!confirm('Remove this member from the trip?')) return
   await store.removeMember(props.id, userId)
+  await loadAll()
+}
+
+async function cancelInvite(inviteId) {
+  if (!confirm('Cancel this invitation?')) return
+  await store.cancelInvitation(props.id, inviteId)
   await loadAll()
 }
 
@@ -314,6 +346,367 @@ async function removeAcc(accId) {
   accommodations.value = await store.fetchAccommodations(props.id)
 }
 
+// --- rental vehicles ---
+const showRentalForm = ref(false)
+const editingRentalId = ref(null)
+const rentalError = ref('')
+const rentalForm = ref(blankRentalForm())
+
+function blankRentalForm() {
+  return {
+    rented_by: '',
+    company: '',
+    vehicle: '',
+    confirmation_code: '',
+    pickup_location: '',
+    dropoff_location: '',
+    pickup_time: '',
+    dropoff_time: '',
+    link: '',
+    notes: '',
+  }
+}
+
+function openAddRental() {
+  rentalForm.value = blankRentalForm()
+  editingRentalId.value = null
+  rentalError.value = ''
+  showRentalForm.value = true
+}
+
+function openEditRental(r) {
+  rentalForm.value = {
+    rented_by: r.rented_by ?? '',
+    company: r.company || '',
+    vehicle: r.vehicle || '',
+    confirmation_code: r.confirmation_code || '',
+    pickup_location: r.pickup_location || '',
+    dropoff_location: r.dropoff_location || '',
+    pickup_time: toLocalInput(r.pickup_time),
+    dropoff_time: toLocalInput(r.dropoff_time),
+    link: r.link || '',
+    notes: r.notes || '',
+  }
+  editingRentalId.value = r.id
+  rentalError.value = ''
+  showRentalForm.value = true
+}
+
+function closeRentalForm() {
+  showRentalForm.value = false
+  editingRentalId.value = null
+}
+
+async function saveRental() {
+  rentalError.value = ''
+  const f = rentalForm.value
+  const payload = {
+    rented_by: f.rented_by || null,
+    company: f.company,
+    vehicle: f.vehicle,
+    confirmation_code: f.confirmation_code,
+    pickup_location: f.pickup_location,
+    dropoff_location: f.dropoff_location,
+    pickup_time: f.pickup_time ? new Date(f.pickup_time).toISOString() : null,
+    dropoff_time: f.dropoff_time ? new Date(f.dropoff_time).toISOString() : null,
+    link: f.link,
+    notes: f.notes,
+  }
+  try {
+    if (editingRentalId.value) {
+      await store.updateRental(props.id, editingRentalId.value, payload)
+    } else {
+      await store.createRental(props.id, payload)
+    }
+    closeRentalForm()
+    rentals.value = await store.fetchRentals(props.id)
+  } catch (e) {
+    rentalError.value = e.response?.data?.detail || 'Could not save rental.'
+  }
+}
+
+async function removeRental(rentalId) {
+  if (!confirm('Delete this rental?')) return
+  await store.deleteRental(props.id, rentalId)
+  rentals.value = await store.fetchRentals(props.id)
+}
+
+// --- itinerary ---
+const showItinForm = ref(false)
+const editingItinId = ref(null)
+const itinError = ref('')
+const itinForm = ref(blankItinForm())
+
+function blankItinForm() {
+  return { title: '', day: '', start_time: '', end_time: '', location: '', link: '', notes: '' }
+}
+
+// Backend returns items ordered by (day, start_time) with nulls last, so
+// grouping in that order yields days ascending with Unscheduled last.
+const itineraryByDay = computed(() => {
+  const groups = []
+  const byKey = new Map()
+  for (const it of itinerary.value) {
+    const key = it.day || 'unscheduled'
+    if (!byKey.has(key)) {
+      const g = { key, day: it.day || null, items: [] }
+      byKey.set(key, g)
+      groups.push(g)
+    }
+    byKey.get(key).items.push(it)
+  }
+  return groups
+})
+
+function openAddItin() {
+  itinForm.value = blankItinForm()
+  itinForm.value.day = trip.value?.start_date || ''
+  editingItinId.value = null
+  itinError.value = ''
+  showItinForm.value = true
+}
+
+function openEditItin(it) {
+  itinForm.value = {
+    title: it.title || '',
+    day: it.day || '',
+    start_time: (it.start_time || '').slice(0, 5),
+    end_time: (it.end_time || '').slice(0, 5),
+    location: it.location || '',
+    link: it.link || '',
+    notes: it.notes || '',
+  }
+  editingItinId.value = it.id
+  itinError.value = ''
+  showItinForm.value = true
+}
+
+function closeItinForm() {
+  showItinForm.value = false
+  editingItinId.value = null
+}
+
+async function saveItin() {
+  itinError.value = ''
+  const f = itinForm.value
+  const payload = {
+    title: f.title,
+    day: f.day || null,
+    start_time: f.start_time || null,
+    end_time: f.end_time || null,
+    location: f.location,
+    link: f.link,
+    notes: f.notes,
+  }
+  try {
+    if (editingItinId.value) {
+      await store.updateItineraryItem(props.id, editingItinId.value, payload)
+    } else {
+      await store.createItineraryItem(props.id, payload)
+    }
+    closeItinForm()
+    itinerary.value = await store.fetchItinerary(props.id)
+  } catch (e) {
+    const d = e.response?.data
+    itinError.value = d?.title?.[0] || d?.detail || 'Could not save item.'
+  }
+}
+
+async function removeItin(itemId) {
+  if (!confirm('Delete this itinerary item?')) return
+  await store.deleteItineraryItem(props.id, itemId)
+  itinerary.value = await store.fetchItinerary(props.id)
+}
+
+function fmtDay(iso) {
+  if (!iso) return 'Unscheduled'
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+function fmtTime(t) {
+  if (!t) return ''
+  const [h, m] = t.split(':').map(Number)
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+function itinTimeRange(it) {
+  const s = fmtTime(it.start_time)
+  const e = fmtTime(it.end_time)
+  if (s && e) return `${s} – ${e}`
+  return s || e || ''
+}
+
+// --- meals ---
+const showMealForm = ref(false)
+const editingMealId = ref(null)
+const mealError = ref('')
+const mealForm = ref(blankMealForm())
+const newIngredient = ref('')
+
+const MEAL_TYPES = [
+  { v: 'breakfast', label: 'Breakfast' },
+  { v: 'lunch', label: 'Lunch' },
+  { v: 'dinner', label: 'Dinner' },
+  { v: 'snack', label: 'Snack' },
+]
+const MEAL_ORDER = { breakfast: 0, lunch: 1, dinner: 2, snack: 3 }
+
+function mealTypeLabel(v) {
+  return MEAL_TYPES.find((t) => t.v === v)?.label || v
+}
+
+function blankMealForm() {
+  return { title: '', day: '', meal_type: 'dinner', cookIds: [], ingredients: [], notes: '' }
+}
+
+const mealsByDay = computed(() => {
+  const groups = []
+  const byKey = new Map()
+  for (const m of meals.value) {
+    const key = m.day || 'unscheduled'
+    if (!byKey.has(key)) {
+      const g = { key, day: m.day || null, items: [] }
+      byKey.set(key, g)
+      groups.push(g)
+    }
+    byKey.get(key).items.push(m)
+  }
+  for (const g of groups) {
+    g.items.sort((a, b) => (MEAL_ORDER[a.meal_type] ?? 9) - (MEAL_ORDER[b.meal_type] ?? 9))
+  }
+  return groups
+})
+
+// Dietary reference so whoever plans meals can see everyone's needs.
+const dietaryNeeds = computed(() =>
+  members.value
+    .filter((m) => m.user.dietary_restrictions?.length)
+    .map((m) => ({ name: m.user.name, items: m.user.dietary_restrictions })),
+)
+
+function openAddMeal() {
+  mealForm.value = blankMealForm()
+  mealForm.value.day = trip.value?.start_date || ''
+  newIngredient.value = ''
+  editingMealId.value = null
+  mealError.value = ''
+  showMealForm.value = true
+}
+
+function openEditMeal(m) {
+  mealForm.value = {
+    title: m.title || '',
+    day: m.day || '',
+    meal_type: m.meal_type || 'dinner',
+    cookIds: (m.cooks || []).slice(),
+    ingredients: (m.ingredients || []).slice(),
+    notes: m.notes || '',
+  }
+  newIngredient.value = ''
+  editingMealId.value = m.id
+  mealError.value = ''
+  showMealForm.value = true
+}
+
+function closeMealForm() {
+  showMealForm.value = false
+  editingMealId.value = null
+}
+
+function addIngredient() {
+  const v = newIngredient.value.trim()
+  if (v && !mealForm.value.ingredients.includes(v)) mealForm.value.ingredients.push(v)
+  newIngredient.value = ''
+}
+function removeIngredient(i) {
+  mealForm.value.ingredients.splice(i, 1)
+}
+
+async function saveMeal() {
+  mealError.value = ''
+  addIngredient() // fold in any half-typed ingredient
+  const f = mealForm.value
+  const payload = {
+    title: f.title,
+    day: f.day || null,
+    meal_type: f.meal_type,
+    cooks: f.cookIds,
+    ingredients: f.ingredients,
+    notes: f.notes,
+  }
+  try {
+    if (editingMealId.value) {
+      await store.updateMeal(props.id, editingMealId.value, payload)
+    } else {
+      await store.createMeal(props.id, payload)
+    }
+    closeMealForm()
+    meals.value = await store.fetchMeals(props.id)
+  } catch (e) {
+    const d = e.response?.data
+    mealError.value = d?.cooks?.[0] || d?.title?.[0] || d?.detail || 'Could not save meal.'
+  }
+}
+
+async function removeMeal(mealId) {
+  if (!confirm('Delete this meal?')) return
+  await store.deleteMeal(props.id, mealId)
+  meals.value = await store.fetchMeals(props.id)
+}
+
+// --- grocery list ---
+const groceryForm = ref({ name: '', quantity: '', category: '' })
+
+// Backend orders by category; keep that order but push Uncategorized last.
+const groceryByCategory = computed(() => {
+  const groups = []
+  const byKey = new Map()
+  for (const it of grocery.value) {
+    const key = it.category || ''
+    if (!byKey.has(key)) {
+      const g = { key, label: it.category || 'Uncategorized', items: [] }
+      byKey.set(key, g)
+      groups.push(g)
+    }
+    byKey.get(key).items.push(it)
+  }
+  return groups.sort((a, b) => (a.key === '' ? 1 : b.key === '' ? -1 : 0))
+})
+
+const groceryProgress = computed(() => ({
+  total: grocery.value.length,
+  done: grocery.value.filter((i) => i.is_checked).length,
+}))
+
+async function addGrocery() {
+  const name = groceryForm.value.name.trim()
+  if (!name) return
+  await store.createGroceryItem(props.id, {
+    name,
+    quantity: groceryForm.value.quantity.trim(),
+    category: groceryForm.value.category.trim(),
+  })
+  groceryForm.value = { name: '', quantity: '', category: '' }
+  grocery.value = await store.fetchGrocery(props.id)
+}
+
+async function toggleGrocery(item) {
+  // item.is_checked is already updated by the checkbox v-model.
+  try {
+    await store.updateGroceryItem(props.id, item.id, { is_checked: item.is_checked })
+  } catch {
+    item.is_checked = !item.is_checked // revert on failure
+  }
+}
+
+async function removeGrocery(itemId) {
+  await store.deleteGroceryItem(props.id, itemId)
+  grocery.value = await store.fetchGrocery(props.id)
+}
+
 async function deleteTrip() {
   if (!confirm('Delete this entire trip? This cannot be undone.')) return
   await store.deleteTrip(props.id)
@@ -411,13 +804,19 @@ function flightLabel(f) {
     </div>
 
     <!-- Members -->
-    <section class="space-y-3">
-      <h2 class="text-lg font-medium">Members</h2>
+    <section class="panel">
+      <Accordion title="Members" :count="members.length">
+        <div class="space-y-3">
       <ul class="divide-y divide-stone-100 rounded-lg border border-stone-200 bg-white">
-        <li v-for="m in members" :key="m.id" class="flex items-start justify-between gap-2 px-4 py-2">
+        <li
+          v-for="m in members"
+          :key="m.id"
+          class="group flex items-start justify-between gap-2 px-4 py-2"
+          @click="toggleCard('member:' + m.id, $event)"
+        >
           <div>
             <div class="text-sm">
-              {{ m.user.name }} <span class="text-stone-400">({{ m.user.email }})</span>
+              {{ m.user.name }}
               <span class="ml-1 rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600">{{ m.role }}</span>
             </div>
             <div
@@ -435,7 +834,8 @@ function flightLabel(f) {
           </div>
           <button
             v-if="isOwner || m.user.id === auth.user?.id"
-            class="btn-icon-danger"
+            class="btn-icon-danger card-actions"
+            :class="{ 'is-revealed': activeCard === 'member:' + m.id }"
             aria-label="Remove member"
             title="Remove member"
             @click="removeMember(m.user.id)"
@@ -446,7 +846,23 @@ function flightLabel(f) {
       </ul>
 
       <ul v-if="pendingInvites.length" class="space-y-1 text-sm text-stone-500">
-        <li v-for="inv in pendingInvites" :key="inv.id">⏳ Invited: {{ inv.email }} (pending)</li>
+        <li
+          v-for="inv in pendingInvites"
+          :key="inv.id"
+          class="group flex items-center justify-between gap-2"
+          @click="toggleCard('invite:' + inv.id, $event)"
+        >
+          <span>⏳ Invited: {{ inv.email }} (pending)</span>
+          <button
+            class="btn-icon-danger card-actions"
+            :class="{ 'is-revealed': activeCard === 'invite:' + inv.id }"
+            aria-label="Cancel invitation"
+            title="Cancel invitation"
+            @click="cancelInvite(inv.id)"
+          >
+            ×
+          </button>
+        </li>
       </ul>
 
       <form class="flex flex-col gap-2 sm:flex-row" @submit.prevent="invite">
@@ -454,10 +870,334 @@ function flightLabel(f) {
         <button type="submit" class="btn-primary whitespace-nowrap">Add member</button>
       </form>
       <p v-if="inviteMsg" class="text-sm text-stone-600">{{ inviteMsg }}</p>
+        </div>
+      </Accordion>
     </section>
 
+    <!-- Section tabs -->
+    <div class="flex gap-4 overflow-x-auto overflow-y-hidden border-b border-stone-200">
+      <button
+        v-for="tab in TABS"
+        :key="tab.k"
+        class="-mb-px whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium transition"
+        :class="
+          activeTab === tab.k
+            ? 'border-forest-600 text-forest-700'
+            : 'border-transparent text-stone-500 hover:text-stone-700'
+        "
+        @click="activeTab = tab.k"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <!-- Activities -->
+    <div v-show="activeTab === 'activities'" class="space-y-8">
+    <!-- Itinerary -->
+    <section class="panel space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-medium">Itinerary</h2>
+        <button class="btn-secondary" @click="showItinForm ? closeItinForm() : openAddItin()">
+          {{ showItinForm ? 'Cancel' : 'Add item' }}
+        </button>
+      </div>
+
+      <div v-if="showItinForm" class="card">
+        <h3 class="mb-4 font-medium">{{ editingItinId ? 'Edit item' : 'Add item' }}</h3>
+        <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="saveItin">
+          <div class="sm:col-span-2">
+            <label class="label">Title</label>
+            <input v-model="itinForm.title" class="input" required placeholder="Sunrise hike to Delicate Arch" />
+          </div>
+          <div>
+            <label class="label">Day</label>
+            <input v-model="itinForm.day" type="date" class="input" />
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="label">Start</label>
+              <input v-model="itinForm.start_time" type="time" class="input" />
+            </div>
+            <div>
+              <label class="label">End</label>
+              <input v-model="itinForm.end_time" type="time" class="input" />
+            </div>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Location</label>
+            <input v-model="itinForm.location" class="input" placeholder="Arches National Park, UT" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Link (optional)</label>
+            <input v-model="itinForm.link" type="url" class="input" placeholder="https://…" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Notes</label>
+            <textarea v-model="itinForm.notes" rows="2" class="input"></textarea>
+          </div>
+          <p v-if="itinError" class="text-sm text-clay-600 sm:col-span-2">{{ itinError }}</p>
+          <div class="flex flex-col gap-2 sm:col-span-2 sm:flex-row">
+            <button type="submit" class="btn-primary">
+              {{ editingItinId ? 'Save changes' : 'Add item' }}
+            </button>
+            <button type="button" class="btn-secondary" @click="closeItinForm">Cancel</button>
+          </div>
+        </form>
+      </div>
+
+      <p v-if="!itinerary.length" class="text-stone-500">Nothing planned yet.</p>
+      <div v-else class="space-y-5">
+        <div v-for="group in itineraryByDay" :key="group.key">
+          <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-500">
+            {{ fmtDay(group.day) }}
+          </h3>
+          <ul class="space-y-3">
+            <li
+              v-for="it in group.items"
+              :key="it.id"
+              class="card group"
+              @click="toggleCard('itin:' + it.id, $event)"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p v-if="itinTimeRange(it)" class="text-xs font-medium text-forest-700">
+                    {{ itinTimeRange(it) }}
+                  </p>
+                  <p class="font-medium">{{ it.title }}</p>
+                  <a
+                    v-if="it.location"
+                    :href="mapsUrl(it.location)"
+                    target="_blank"
+                    rel="noopener"
+                    class="block text-sm text-forest-600 hover:underline"
+                    >📍 {{ it.location }} <span class="text-stone-400">(open in maps ↗)</span></a
+                  >
+                  <a
+                    v-if="it.link"
+                    :href="it.link"
+                    target="_blank"
+                    rel="noopener"
+                    class="block text-sm text-forest-600 hover:underline"
+                    >View link ↗</a
+                  >
+                  <ClampText v-if="it.notes" :text="it.notes" class="mt-1" />
+                </div>
+                <div
+                  class="card-actions flex shrink-0 flex-col items-end gap-2"
+                  :class="{ 'is-revealed': activeCard === 'itin:' + it.id }"
+                >
+                  <button class="btn-icon" aria-label="Edit item" title="Edit item" @click="openEditItin(it)">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                    </svg>
+                  </button>
+                  <button class="btn-icon-danger" aria-label="Delete item" title="Delete item" @click="removeItin(it.id)">×</button>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Meal plan -->
+    <section class="panel space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-medium">Meal plan</h2>
+        <button class="btn-secondary" @click="showMealForm ? closeMealForm() : openAddMeal()">
+          {{ showMealForm ? 'Cancel' : 'Add meal' }}
+        </button>
+      </div>
+
+      <div v-if="dietaryNeeds.length" class="rounded-md border border-clay-200 bg-clay-50 p-3 text-sm">
+        <p class="mb-1 font-medium text-clay-700">Dietary needs to plan around</p>
+        <ul class="space-y-0.5 text-clay-700">
+          <li v-for="d in dietaryNeeds" :key="d.name">
+            <span class="font-medium">{{ d.name }}:</span> {{ d.items.join(', ') }}
+          </li>
+        </ul>
+      </div>
+
+      <div v-if="showMealForm" class="card">
+        <h3 class="mb-4 font-medium">{{ editingMealId ? 'Edit meal' : 'Add meal' }}</h3>
+        <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="saveMeal">
+          <div class="sm:col-span-2">
+            <label class="label">Dish</label>
+            <input v-model="mealForm.title" class="input" required placeholder="Chili & cornbread" />
+          </div>
+          <div>
+            <label class="label">Day</label>
+            <input v-model="mealForm.day" type="date" class="input" />
+          </div>
+          <div>
+            <label class="label">Meal</label>
+            <select v-model="mealForm.meal_type" class="input">
+              <option v-for="t in MEAL_TYPES" :key="t.v" :value="t.v">{{ t.label }}</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Cook(s)</label>
+            <div class="flex flex-wrap gap-2">
+              <label
+                v-for="m in members"
+                :key="m.id"
+                class="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-md border border-stone-200 px-3 text-sm"
+              >
+                <input type="checkbox" class="h-4 w-4" :value="m.user.id" v-model="mealForm.cookIds" />
+                {{ m.user.name }}
+              </label>
+            </div>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Ingredients</label>
+            <div v-if="mealForm.ingredients.length" class="mb-2 flex flex-wrap gap-2">
+              <span
+                v-for="(ing, i) in mealForm.ingredients"
+                :key="i"
+                class="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-1 text-sm text-stone-700"
+              >
+                {{ ing }}
+                <button
+                  type="button"
+                  class="text-stone-500 hover:text-stone-700"
+                  aria-label="Remove"
+                  @click="removeIngredient(i)"
+                >
+                  ×
+                </button>
+              </span>
+            </div>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <input
+                v-model="newIngredient"
+                class="input"
+                placeholder="e.g. ground beef"
+                @keydown.enter.prevent="addIngredient"
+              />
+              <button type="button" class="btn-secondary whitespace-nowrap" @click="addIngredient">
+                Add
+              </button>
+            </div>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Notes</label>
+            <textarea v-model="mealForm.notes" rows="2" class="input"></textarea>
+          </div>
+          <p v-if="mealError" class="text-sm text-clay-600 sm:col-span-2">{{ mealError }}</p>
+          <div class="flex flex-col gap-2 sm:col-span-2 sm:flex-row">
+            <button type="submit" class="btn-primary">
+              {{ editingMealId ? 'Save changes' : 'Add meal' }}
+            </button>
+            <button type="button" class="btn-secondary" @click="closeMealForm">Cancel</button>
+          </div>
+        </form>
+      </div>
+
+      <p v-if="!meals.length" class="text-stone-500">No meals planned yet.</p>
+      <div v-else class="space-y-5">
+        <div v-for="group in mealsByDay" :key="group.key">
+          <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-500">
+            {{ fmtDay(group.day) }}
+          </h3>
+          <ul class="space-y-3">
+            <li
+              v-for="m in group.items"
+              :key="m.id"
+              class="card group"
+              @click="toggleCard('meal:' + m.id, $event)"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-xs font-medium uppercase tracking-wide text-forest-700">
+                    {{ mealTypeLabel(m.meal_type) }}
+                  </p>
+                  <p class="font-medium">{{ m.title }}</p>
+                  <p v-if="m.cook_details.length" class="text-sm text-stone-500">
+                    Cook: {{ m.cook_details.map((c) => c.name).join(', ') }}
+                  </p>
+                  <div v-if="m.ingredients.length" class="mt-1 flex flex-wrap gap-1">
+                    <span
+                      v-for="(ing, i) in m.ingredients"
+                      :key="i"
+                      class="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600"
+                    >
+                      {{ ing }}
+                    </span>
+                  </div>
+                  <ClampText v-if="m.notes" :text="m.notes" class="mt-1" />
+                </div>
+                <div
+                  class="card-actions flex shrink-0 flex-col items-end gap-2"
+                  :class="{ 'is-revealed': activeCard === 'meal:' + m.id }"
+                >
+                  <button class="btn-icon" aria-label="Edit meal" title="Edit meal" @click="openEditMeal(m)">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                    </svg>
+                  </button>
+                  <button class="btn-icon-danger" aria-label="Delete meal" title="Delete meal" @click="removeMeal(m.id)">×</button>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Grocery list -->
+    <section class="panel space-y-3 border-forest-200 bg-forest-50">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-medium">Grocery list</h2>
+        <span v-if="groceryProgress.total" class="text-sm text-stone-500">
+          {{ groceryProgress.done }} / {{ groceryProgress.total }} got
+        </span>
+      </div>
+
+      <form class="flex flex-col gap-2 sm:flex-row" @submit.prevent="addGrocery">
+        <input v-model="groceryForm.name" class="input sm:flex-1" placeholder="Item (e.g. eggs)" required />
+        <input v-model="groceryForm.quantity" class="input sm:w-24" placeholder="Qty" />
+        <input v-model="groceryForm.category" class="input sm:w-40" placeholder="Category" />
+        <button type="submit" class="btn-primary whitespace-nowrap">Add</button>
+      </form>
+
+      <p v-if="!grocery.length" class="text-stone-500">List is empty.</p>
+      <div v-else class="space-y-4">
+        <div v-for="group in groceryByCategory" :key="group.key">
+          <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-400">
+            {{ group.label }}
+          </h3>
+          <ul class="divide-y divide-stone-100 rounded-lg border border-stone-200 bg-white">
+            <li v-for="item in group.items" :key="item.id" class="flex items-center gap-3 px-3 py-2">
+              <label class="flex min-h-[36px] flex-1 cursor-pointer items-center gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  class="h-4 w-4 shrink-0"
+                  v-model="item.is_checked"
+                  @change="toggleGrocery(item)"
+                />
+                <span :class="item.is_checked ? 'text-stone-400 line-through' : ''">
+                  {{ item.name }}<span v-if="item.quantity" class="text-stone-400"> · {{ item.quantity }}</span>
+                </span>
+              </label>
+              <button
+                class="shrink-0 text-lg leading-none text-stone-300 transition hover:text-clay-600"
+                aria-label="Delete item"
+                title="Delete item"
+                @click="removeGrocery(item.id)"
+              >
+                ×
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    </div>
+
+    <!-- Logistics -->
+    <div v-show="activeTab === 'logistics'" class="space-y-8">
     <!-- Accommodations -->
-    <section class="space-y-3">
+    <section class="panel space-y-3">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-medium">Accommodations</h2>
         <button class="btn-secondary" @click="showAccForm ? closeAccForm() : openAddAcc()">
@@ -519,7 +1259,12 @@ function flightLabel(f) {
 
       <p v-if="!accommodations.length" class="text-stone-500">No accommodations added yet.</p>
       <ul v-else class="space-y-3">
-        <li v-for="a in accommodations" :key="a.id" class="card">
+        <li
+          v-for="a in accommodations"
+          :key="a.id"
+          class="card group"
+          @click="toggleCard('acc:' + a.id, $event)"
+        >
           <div class="flex items-start justify-between gap-3">
             <div class="flex min-w-0 gap-3">
               <img
@@ -553,10 +1298,13 @@ function flightLabel(f) {
                   >View listing ↗</a
                 >
               </p>
-              <p v-if="a.notes" class="mt-1 text-sm text-stone-500">{{ a.notes }}</p>
+              <ClampText v-if="a.notes" :text="a.notes" class="mt-1" />
               </div>
             </div>
-            <div class="flex shrink-0 flex-col items-end gap-2">
+            <div
+              class="card-actions flex shrink-0 flex-col items-end gap-2"
+              :class="{ 'is-revealed': activeCard === 'acc:' + a.id }"
+            >
               <button class="btn-icon" aria-label="Edit accommodation" title="Edit accommodation" @click="openEditAcc(a)">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
@@ -577,7 +1325,7 @@ function flightLabel(f) {
     </section>
 
     <!-- Flights -->
-    <section class="space-y-3">
+    <section class="panel space-y-3">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-medium">Flights</h2>
         <button class="btn-secondary" @click="showFlightForm ? closeFlightForm() : openAddFlight()">
@@ -689,12 +1437,20 @@ function flightLabel(f) {
 
       <p v-if="!flights.length" class="text-stone-500">No flights added yet.</p>
       <div v-else class="space-y-5">
-        <div v-for="group in flightGroups" :key="group.key">
-          <h3 class="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-500">
-            {{ group.label }}
-          </h3>
+        <Accordion
+          v-for="group in flightGroups"
+          :key="group.key"
+          :title="group.label"
+          title-class="text-sm font-semibold uppercase tracking-wide text-stone-500"
+          :count="group.flights.length"
+        >
           <ul class="space-y-3">
-            <li v-for="f in group.flights" :key="f.id" class="card">
+            <li
+              v-for="f in group.flights"
+              :key="f.id"
+              class="card group"
+              @click="toggleCard('flight:' + f.id, $event)"
+            >
           <div class="flex items-start justify-between">
             <div>
               <p class="font-medium">
@@ -715,7 +1471,10 @@ function flightLabel(f) {
                 </span>
               </div>
             </div>
-            <div class="flex shrink-0 flex-col items-end gap-2">
+            <div
+              class="card-actions flex shrink-0 flex-col items-end gap-2"
+              :class="{ 'is-revealed': activeCard === 'flight:' + f.id }"
+            >
               <button class="btn-icon" aria-label="Edit flight" title="Edit flight" @click="openEditFlight(f)">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
@@ -733,8 +1492,151 @@ function flightLabel(f) {
           </div>
             </li>
           </ul>
-        </div>
+        </Accordion>
       </div>
     </section>
+
+    <!-- Rental vehicles -->
+    <section class="panel space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-medium">Rental vehicles</h2>
+        <button class="btn-secondary" @click="showRentalForm ? closeRentalForm() : openAddRental()">
+          {{ showRentalForm ? 'Cancel' : 'Add rental' }}
+        </button>
+      </div>
+
+      <div v-if="showRentalForm" class="card">
+        <h3 class="mb-4 font-medium">{{ editingRentalId ? 'Edit rental' : 'Add rental' }}</h3>
+        <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="saveRental">
+          <div>
+            <label class="label">Company</label>
+            <input v-model="rentalForm.company" class="input" placeholder="Enterprise" />
+          </div>
+          <div>
+            <label class="label">Vehicle</label>
+            <input v-model="rentalForm.vehicle" class="input" placeholder="Jeep Wrangler" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Rented by</label>
+            <select v-model="rentalForm.rented_by" class="input">
+              <option value="">—</option>
+              <option v-for="m in members" :key="m.id" :value="m.user.id">{{ m.user.name }}</option>
+            </select>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Confirmation #</label>
+            <input v-model="rentalForm.confirmation_code" class="input" />
+          </div>
+          <div>
+            <label class="label">Pickup location</label>
+            <input v-model="rentalForm.pickup_location" class="input" placeholder="SLC Airport" />
+          </div>
+          <div>
+            <label class="label">Pickup time</label>
+            <input v-model="rentalForm.pickup_time" type="datetime-local" class="input" />
+          </div>
+          <div>
+            <label class="label">Drop-off location</label>
+            <input v-model="rentalForm.dropoff_location" class="input" />
+          </div>
+          <div>
+            <label class="label">Drop-off time</label>
+            <input v-model="rentalForm.dropoff_time" type="datetime-local" class="input" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Reservation link (optional)</label>
+            <input v-model="rentalForm.link" type="url" class="input" placeholder="https://…" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="label">Notes</label>
+            <textarea v-model="rentalForm.notes" rows="2" class="input"></textarea>
+          </div>
+          <p v-if="rentalError" class="text-sm text-clay-600 sm:col-span-2">{{ rentalError }}</p>
+          <div class="flex flex-col gap-2 sm:col-span-2 sm:flex-row">
+            <button type="submit" class="btn-primary">
+              {{ editingRentalId ? 'Save changes' : 'Add rental' }}
+            </button>
+            <button type="button" class="btn-secondary" @click="closeRentalForm">Cancel</button>
+          </div>
+        </form>
+      </div>
+
+      <p v-if="!rentals.length" class="text-stone-500">No rentals added yet.</p>
+      <ul v-else class="space-y-3">
+        <li
+          v-for="r in rentals"
+          :key="r.id"
+          class="card group"
+          @click="toggleCard('rental:' + r.id, $event)"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="font-medium">
+                {{ [r.company, r.vehicle].filter(Boolean).join(' · ') || 'Rental' }}
+              </p>
+              <p v-if="r.rented_by_detail" class="text-sm text-stone-500">
+                Rented by {{ r.rented_by_detail.name }}
+              </p>
+              <p v-if="r.confirmation_code" class="text-sm text-stone-500">
+                Conf: {{ r.confirmation_code }}
+              </p>
+              <p v-if="r.pickup_location || r.pickup_time" class="text-sm text-stone-600">
+                Pickup:
+                <a
+                  v-if="r.pickup_location"
+                  :href="mapsUrl(r.pickup_location)"
+                  target="_blank"
+                  rel="noopener"
+                  class="text-forest-600 hover:underline"
+                  >{{ r.pickup_location }}</a
+                ><span v-if="r.pickup_time"> · {{ fmt(r.pickup_time) }}</span>
+              </p>
+              <p v-if="r.dropoff_location || r.dropoff_time" class="text-sm text-stone-600">
+                Drop-off:
+                <a
+                  v-if="r.dropoff_location"
+                  :href="mapsUrl(r.dropoff_location)"
+                  target="_blank"
+                  rel="noopener"
+                  class="text-forest-600 hover:underline"
+                  >{{ r.dropoff_location }}</a
+                ><span v-if="r.dropoff_time"> · {{ fmt(r.dropoff_time) }}</span>
+              </p>
+              <a
+                v-if="r.link"
+                :href="r.link"
+                target="_blank"
+                rel="noopener"
+                class="block text-sm text-forest-600 hover:underline"
+                >Reservation ↗</a
+              >
+              <ClampText v-if="r.notes" :text="r.notes" class="mt-1" />
+            </div>
+            <div
+              class="card-actions flex shrink-0 flex-col items-end gap-2"
+              :class="{ 'is-revealed': activeCard === 'rental:' + r.id }"
+            >
+              <button class="btn-icon" aria-label="Edit rental" title="Edit rental" @click="openEditRental(r)">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                </svg>
+              </button>
+              <button class="btn-icon-danger" aria-label="Delete rental" title="Delete rental" @click="removeRental(r.id)">×</button>
+            </div>
+          </div>
+        </li>
+      </ul>
+    </section>
+    </div>
+
+    <!-- Picture of Y'hoshua -->
+    <Transition name="fade" appear>
+      <img
+        v-if="activeTab === 'yhoshua'"
+        :src="yhoshuaImg"
+        alt="Y'hoshua"
+        class="mx-auto max-h-[70vh] w-auto rounded-lg shadow-sm"
+      />
+    </Transition>
   </div>
 </template>

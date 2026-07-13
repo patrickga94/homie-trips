@@ -263,6 +263,18 @@ class TripApiTests(APITestCase):
         self.assertEqual(fetch_og_image("http://169.254.169.254/latest/meta-data/"), "")
         self.assertEqual(fetch_og_image("ftp://example.com/file"), "")
 
+    def test_cancel_invitation(self):
+        trip = Trip.objects.create(name="Cleanup", created_by=self.alice)
+        TripMembership.objects.create(trip=trip, user=self.alice, role="owner")
+        self.client.force_login(self.alice)
+        self.client.post(
+            f"/api/trips/{trip.id}/members/", {"email": "typo@example.com"}, format="json"
+        )
+        inv = Invitation.objects.get(trip=trip, email="typo@example.com")
+        resp = self.client.delete(f"/api/trips/{trip.id}/invitations/{inv.id}/")
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Invitation.objects.filter(pk=inv.id).exists())
+
     def test_login_is_rate_limited(self):
         # 'login' scope allows 10/min; the 11th attempt from the same client is
         # throttled (429), which blunts password brute-forcing.
@@ -273,6 +285,106 @@ class TripApiTests(APITestCase):
         ]
         self.assertEqual(codes[0], status.HTTP_400_BAD_REQUEST)
         self.assertIn(status.HTTP_429_TOO_MANY_REQUESTS, codes)
+
+    def test_itinerary_crud_and_membership(self):
+        trip = Trip.objects.create(name="Yellowstone", created_by=self.alice)
+        TripMembership.objects.create(trip=trip, user=self.alice, role="owner")
+        self.client.force_login(self.alice)
+        resp = self.client.post(
+            f"/api/trips/{trip.id}/itinerary/",
+            {
+                "title": "Old Faithful",
+                "day": "2026-09-02",
+                "start_time": "09:30",
+                "location": "Old Faithful, WY",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["title"], "Old Faithful")
+        self.assertEqual(resp.data["start_time"], "09:30:00")
+
+        # Non-member is blocked.
+        self.client.force_login(self.bob)
+        blocked = self.client.get(f"/api/trips/{trip.id}/itinerary/")
+        self.assertEqual(blocked.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_meal_crud_with_cooks_and_ingredients(self):
+        trip = Trip.objects.create(name="Cabin Cooking", created_by=self.alice)
+        TripMembership.objects.create(trip=trip, user=self.alice, role="owner")
+        TripMembership.objects.create(trip=trip, user=self.bob, role="member")
+        self.client.force_login(self.alice)
+        resp = self.client.post(
+            f"/api/trips/{trip.id}/meals/",
+            {
+                "title": "Tacos",
+                "day": "2026-09-02",
+                "meal_type": "dinner",
+                "cooks": [self.alice.id, self.bob.id],
+                "ingredients": ["tortillas", " beans ", ""],
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(len(resp.data["cooks"]), 2)
+        self.assertEqual(len(resp.data["cook_details"]), 2)
+        self.assertEqual(resp.data["ingredients"], ["tortillas", "beans"])
+
+    def test_meal_cook_must_be_trip_member(self):
+        trip = Trip.objects.create(name="Solo", created_by=self.alice)
+        TripMembership.objects.create(trip=trip, user=self.alice, role="owner")
+        self.client.force_login(self.alice)
+        resp = self.client.post(
+            f"/api/trips/{trip.id}/meals/",
+            {"title": "Soup", "cooks": [self.bob.id]},  # Bob isn't a member
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_rental_crud_and_membership(self):
+        trip = Trip.objects.create(name="Road Trip", created_by=self.alice)
+        TripMembership.objects.create(trip=trip, user=self.alice, role="owner")
+        self.client.force_login(self.alice)
+        resp = self.client.post(
+            f"/api/trips/{trip.id}/rentals/",
+            {
+                "company": "Enterprise",
+                "vehicle": "Jeep Wrangler",
+                "pickup_location": "SLC Airport",
+                "pickup_time": "2026-09-01T12:00:00Z",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["vehicle"], "Jeep Wrangler")
+
+        self.client.force_login(self.bob)
+        blocked = self.client.get(f"/api/trips/{trip.id}/rentals/")
+        self.assertEqual(blocked.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_grocery_crud_and_toggle(self):
+        trip = Trip.objects.create(name="Shopping", created_by=self.alice)
+        TripMembership.objects.create(trip=trip, user=self.alice, role="owner")
+        self.client.force_login(self.alice)
+        created = self.client.post(
+            f"/api/trips/{trip.id}/grocery/",
+            {"name": "Eggs", "quantity": "2 dozen", "category": "Dairy"},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+        self.assertFalse(created.data["is_checked"])
+        item_id = created.data["id"]
+
+        toggled = self.client.patch(
+            f"/api/trips/{trip.id}/grocery/{item_id}/", {"is_checked": True}, format="json"
+        )
+        self.assertEqual(toggled.status_code, status.HTTP_200_OK)
+        self.assertTrue(toggled.data["is_checked"])
+
+        # Non-member blocked.
+        self.client.force_login(self.bob)
+        blocked = self.client.get(f"/api/trips/{trip.id}/grocery/")
+        self.assertEqual(blocked.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_authentication_required(self):
         resp = self.client.get("/api/trips/")

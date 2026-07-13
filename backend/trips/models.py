@@ -129,6 +129,105 @@ class Accommodation(models.Model):
         return self.name
 
 
+class ItineraryItem(models.Model):
+    """A scheduled activity on a trip. Grouped by day in the UI; items without
+    a day fall into an 'Unscheduled' bucket, and within a day sort by time."""
+
+    trip = models.ForeignKey(
+        Trip, on_delete=models.CASCADE, related_name="itinerary_items"
+    )
+    day = models.DateField(null=True, blank=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    title = models.CharField(max_length=200)
+    location = models.CharField(max_length=300, blank=True)
+    link = models.URLField(blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Postgres sorts NULLs last on ASC, so timed items come before untimed.
+        ordering = ["day", "start_time", "id"]
+
+    def __str__(self):
+        return self.title
+
+
+class RentalVehicle(models.Model):
+    """A rental car/van for the trip."""
+
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="rentals")
+    rented_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rentals_booked",
+    )
+    company = models.CharField(max_length=100, blank=True)  # e.g. Enterprise
+    vehicle = models.CharField(max_length=100, blank=True)  # e.g. Jeep Wrangler
+    confirmation_code = models.CharField(max_length=40, blank=True)
+    pickup_location = models.CharField(max_length=300, blank=True)
+    dropoff_location = models.CharField(max_length=300, blank=True)
+    pickup_time = models.DateTimeField(null=True, blank=True)
+    dropoff_time = models.DateTimeField(null=True, blank=True)
+    link = models.URLField(blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["pickup_time", "id"]
+
+    def __str__(self):
+        return f"{self.company} {self.vehicle}".strip() or f"Rental {self.pk}"
+
+
+class Meal(models.Model):
+    """A planned meal on a trip, grouped by day (sorted by meal type in the UI)."""
+
+    class MealType(models.TextChoices):
+        BREAKFAST = "breakfast", "Breakfast"
+        LUNCH = "lunch", "Lunch"
+        DINNER = "dinner", "Dinner"
+        SNACK = "snack", "Snack"
+
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="meals")
+    day = models.DateField(null=True, blank=True)
+    meal_type = models.CharField(
+        max_length=10, choices=MealType.choices, default=MealType.DINNER
+    )
+    title = models.CharField(max_length=200)
+    cooks = models.ManyToManyField(User, related_name="meals_cooking", blank=True)
+    ingredients = models.JSONField(default=list, blank=True)  # list of strings
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["day", "id"]  # meal-type order is applied in the frontend
+
+    def __str__(self):
+        return self.title
+
+
+class GroceryItem(models.Model):
+    """An item on the trip's shared shopping list."""
+
+    trip = models.ForeignKey(
+        Trip, on_delete=models.CASCADE, related_name="grocery_items"
+    )
+    name = models.CharField(max_length=200)
+    quantity = models.CharField(max_length=50, blank=True)  # e.g. "2 lbs"
+    category = models.CharField(max_length=50, blank=True)  # e.g. "Produce"
+    is_checked = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["category", "created_at", "id"]
+
+    def __str__(self):
+        return self.name
+
+
 class FlightTraveler(models.Model):
     """Through model: one traveler's booking details on a shared flight."""
 

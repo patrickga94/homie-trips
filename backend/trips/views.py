@@ -5,14 +5,28 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Accommodation, Flight, Trip, TripMembership
+from .models import (
+    Accommodation,
+    Flight,
+    GroceryItem,
+    Invitation,
+    ItineraryItem,
+    Meal,
+    RentalVehicle,
+    Trip,
+    TripMembership,
+)
 from .permissions import IsTripMember, IsTripOwner
 from .serializers import (
     AccommodationSerializer,
     AddMemberSerializer,
     FlightSerializer,
+    GroceryItemSerializer,
     InvitationSerializer,
+    ItineraryItemSerializer,
+    MealSerializer,
     MembershipSerializer,
+    RentalVehicleSerializer,
     TripListSerializer,
     TripSerializer,
 )
@@ -92,6 +106,13 @@ class TripViewSet(viewsets.ModelViewSet):
         membership.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=True, methods=["delete"], url_path=r"invitations/(?P<invite_id>[^/.]+)")
+    def cancel_invitation(self, request, pk=None, invite_id=None):
+        trip = self.get_object()  # enforces trip membership
+        invitation = get_object_or_404(Invitation, pk=invite_id, trip=trip)
+        invitation.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class TripScopedMixin:
     """Shared trip lookup for resources nested under /trips/<trip_pk>/.
@@ -144,10 +165,54 @@ class AccommodationViewSet(TripScopedMixin, viewsets.ModelViewSet):
 
     @staticmethod
     def _maybe_fetch_image(instance):
-        # Best-effort: only auto-fill when there's a link and no image yet, so a
-        # manual photo URL (or an already-fetched one) is never overwritten.
         if instance.link and not instance.image_url:
             image = fetch_og_image(instance.link)
             if image:
                 instance.image_url = image
                 instance.save(update_fields=["image_url"])
+
+
+class ItineraryItemViewSet(TripScopedMixin, viewsets.ModelViewSet):
+    serializer_class = ItineraryItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.get_trip().itinerary_items.all()
+
+
+class RentalVehicleViewSet(TripScopedMixin, viewsets.ModelViewSet):
+    serializer_class = RentalVehicleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.get_trip().rentals.select_related("rented_by")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        # Needed by RentalVehicleSerializer.validate (rented_by membership).
+        if self.action in ("create", "update", "partial_update"):
+            context["trip"] = self.get_trip()
+        return context
+
+
+class GroceryItemViewSet(TripScopedMixin, viewsets.ModelViewSet):
+    serializer_class = GroceryItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.get_trip().grocery_items.all()
+
+
+class MealViewSet(TripScopedMixin, viewsets.ModelViewSet):
+    serializer_class = MealSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.get_trip().meals.prefetch_related("cooks")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        # Needed by MealSerializer.validate (cook membership) on create.
+        if self.action in ("create", "update", "partial_update"):
+            context["trip"] = self.get_trip()
+        return context

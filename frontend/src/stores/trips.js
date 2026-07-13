@@ -51,6 +51,10 @@ export const useTripsStore = defineStore('trips', () => {
     await client.delete(`/trips/${tripId}/members/${userId}/`)
   }
 
+  async function cancelInvitation(tripId, inviteId) {
+    await client.delete(`/trips/${tripId}/invitations/${inviteId}/`)
+  }
+
   // --- flights ---
   async function fetchFlights(tripId) {
     const { data } = await client.get(`/trips/${tripId}/flights/`)
@@ -91,6 +95,86 @@ export const useTripsStore = defineStore('trips', () => {
     await client.delete(`/trips/${tripId}/accommodations/${accId}/`)
   }
 
+  // --- itinerary ---
+  async function fetchItinerary(tripId) {
+    const { data } = await client.get(`/trips/${tripId}/itinerary/`)
+    return Array.isArray(data) ? data : data.results
+  }
+
+  async function createItineraryItem(tripId, payload) {
+    const { data } = await client.post(`/trips/${tripId}/itinerary/`, payload)
+    return data
+  }
+
+  async function updateItineraryItem(tripId, itemId, payload) {
+    const { data } = await client.patch(`/trips/${tripId}/itinerary/${itemId}/`, payload)
+    return data
+  }
+
+  async function deleteItineraryItem(tripId, itemId) {
+    await client.delete(`/trips/${tripId}/itinerary/${itemId}/`)
+  }
+
+  // --- meals ---
+  async function fetchMeals(tripId) {
+    const { data } = await client.get(`/trips/${tripId}/meals/`)
+    return Array.isArray(data) ? data : data.results
+  }
+
+  async function createMeal(tripId, payload) {
+    const { data } = await client.post(`/trips/${tripId}/meals/`, payload)
+    return data
+  }
+
+  async function updateMeal(tripId, mealId, payload) {
+    const { data } = await client.patch(`/trips/${tripId}/meals/${mealId}/`, payload)
+    return data
+  }
+
+  async function deleteMeal(tripId, mealId) {
+    await client.delete(`/trips/${tripId}/meals/${mealId}/`)
+  }
+
+  // --- rental vehicles ---
+  async function fetchRentals(tripId) {
+    const { data } = await client.get(`/trips/${tripId}/rentals/`)
+    return Array.isArray(data) ? data : data.results
+  }
+
+  async function createRental(tripId, payload) {
+    const { data } = await client.post(`/trips/${tripId}/rentals/`, payload)
+    return data
+  }
+
+  async function updateRental(tripId, rentalId, payload) {
+    const { data } = await client.patch(`/trips/${tripId}/rentals/${rentalId}/`, payload)
+    return data
+  }
+
+  async function deleteRental(tripId, rentalId) {
+    await client.delete(`/trips/${tripId}/rentals/${rentalId}/`)
+  }
+
+  // --- grocery list ---
+  async function fetchGrocery(tripId) {
+    const { data } = await client.get(`/trips/${tripId}/grocery/`)
+    return Array.isArray(data) ? data : data.results
+  }
+
+  async function createGroceryItem(tripId, payload) {
+    const { data } = await client.post(`/trips/${tripId}/grocery/`, payload)
+    return data
+  }
+
+  async function updateGroceryItem(tripId, itemId, payload) {
+    const { data } = await client.patch(`/trips/${tripId}/grocery/${itemId}/`, payload)
+    return data
+  }
+
+  async function deleteGroceryItem(tripId, itemId) {
+    await client.delete(`/trips/${tripId}/grocery/${itemId}/`)
+  }
+
   return {
     trips,
     loading,
@@ -102,6 +186,7 @@ export const useTripsStore = defineStore('trips', () => {
     fetchMembers,
     addMember,
     removeMember,
+    cancelInvitation,
     fetchFlights,
     createFlight,
     updateFlight,
@@ -110,5 +195,21 @@ export const useTripsStore = defineStore('trips', () => {
     createAccommodation,
     updateAccommodation,
     deleteAccommodation,
+    fetchItinerary,
+    createItineraryItem,
+    updateItineraryItem,
+    deleteItineraryItem,
+    fetchMeals,
+    createMeal,
+    updateMeal,
+    deleteMeal,
+    fetchRentals,
+    createRental,
+    updateRental,
+    deleteRental,
+    fetchGrocery,
+    createGroceryItem,
+    updateGroceryItem,
+    deleteGroceryItem,
   }
 })

@@ -8,7 +8,11 @@ from .models import (
     Accommodation,
     Flight,
     FlightTraveler,
+    GroceryItem,
     Invitation,
+    ItineraryItem,
+    Meal,
+    RentalVehicle,
     Trip,
     TripMembership,
 )
@@ -101,6 +105,111 @@ class AccommodationSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["trip", "created_at"]
+
+
+class ItineraryItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ItineraryItem
+        fields = [
+            "id",
+            "trip",
+            "day",
+            "start_time",
+            "end_time",
+            "title",
+            "location",
+            "link",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = ["trip", "created_at"]
+
+
+class GroceryItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GroceryItem
+        fields = ["id", "trip", "name", "quantity", "category", "is_checked", "created_at"]
+        read_only_fields = ["trip", "created_at"]
+
+
+class RentalVehicleSerializer(serializers.ModelSerializer):
+    rented_by_detail = UserSerializer(source="rented_by", read_only=True)
+
+    class Meta:
+        model = RentalVehicle
+        fields = [
+            "id",
+            "trip",
+            "rented_by",
+            "rented_by_detail",
+            "company",
+            "vehicle",
+            "confirmation_code",
+            "pickup_location",
+            "dropoff_location",
+            "pickup_time",
+            "dropoff_time",
+            "link",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = ["trip", "created_at"]
+
+    def validate(self, attrs):
+        rented_by = attrs.get("rented_by")
+        trip = self.instance.trip if self.instance else self.context.get("trip")
+        if rented_by and trip and not trip.memberships.filter(user=rented_by).exists():
+            raise serializers.ValidationError(
+                {"rented_by": "Must be a member of this trip."}
+            )
+        return attrs
+
+
+class MealSerializer(serializers.ModelSerializer):
+    cooks = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=User.objects.all(), required=False
+    )
+    cook_details = UserSerializer(source="cooks", many=True, read_only=True)
+
+    class Meta:
+        model = Meal
+        fields = [
+            "id",
+            "trip",
+            "day",
+            "meal_type",
+            "title",
+            "cooks",
+            "cook_details",
+            "ingredients",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = ["trip", "created_at"]
+
+    def validate_ingredients(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Must be a list of items.")
+        cleaned = []
+        for item in value:
+            if not isinstance(item, str):
+                raise serializers.ValidationError("Each ingredient must be text.")
+            item = item.strip()
+            if item:
+                cleaned.append(item[:100])
+        return cleaned[:100]
+
+    def validate(self, attrs):
+        cooks = attrs.get("cooks")
+        trip = self.instance.trip if self.instance else self.context.get("trip")
+        if cooks and trip:
+            member_ids = set(trip.memberships.values_list("user_id", flat=True))
+            for user in cooks:
+                if user.id not in member_ids:
+                    raise serializers.ValidationError(
+                        {"cooks": f"{user} is not a member of this trip."}
+                    )
+        return attrs
 
 
 class FlightTravelerSerializer(serializers.ModelSerializer):
