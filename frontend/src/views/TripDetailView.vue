@@ -7,6 +7,7 @@ import AirportPicker from '../components/AirportPicker.vue'
 import ClampText from '../components/ClampText.vue'
 import Accordion from '../components/Accordion.vue'
 import PoiComments from '../components/PoiComments.vue'
+import DietaryNeeds from '../components/DietaryNeeds.vue'
 import yhoshuaImg from '../assets/yhoshua.jpeg'
 
 const props = defineProps({ id: { type: [String, Number], required: true } })
@@ -1215,18 +1216,10 @@ function flightLabel(f) {
         </button>
       </div>
 
-      <div v-if="dietaryNeeds.length" class="rounded-md border border-clay-200 bg-clay-50 p-3 text-sm">
-        <p class="mb-1 font-medium text-clay-700">Dietary needs to plan around</p>
-        <ul class="space-y-0.5 text-clay-700">
-          <li v-for="d in dietaryNeeds" :key="d.name">
-            <span class="font-medium">{{ d.name }}:</span> {{ d.items.join(', ') }}
-          </li>
-        </ul>
-      </div>
-
       <div v-if="showMealForm" class="card">
         <h3 class="mb-4 font-medium">{{ editingMealId ? 'Edit meal' : 'Add meal' }}</h3>
         <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="saveMeal">
+          <DietaryNeeds :needs="dietaryNeeds" class="sm:col-span-2" />
           <div class="sm:col-span-2">
             <label class="label">Dish</label>
             <input v-model="mealForm.title" class="input" required placeholder="Chili & cornbread" />
@@ -1358,6 +1351,8 @@ function flightLabel(f) {
           {{ groceryProgress.done }} / {{ groceryProgress.total }} got
         </span>
       </div>
+
+      <DietaryNeeds :needs="dietaryNeeds" />
 
       <form class="flex flex-col gap-2 sm:flex-row" @submit.prevent="addGrocery">
         <input v-model="groceryForm.name" class="input sm:flex-1" placeholder="Item (e.g. eggs)" required />
