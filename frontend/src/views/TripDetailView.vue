@@ -622,6 +622,11 @@ async function toggleInterest(poi) {
   if (idx !== -1) pois.value[idx] = updated
 }
 
+// Comments arrive nested in the POI list, so a comment change just refetches it.
+async function reloadPois() {
+  pois.value = await store.fetchPois(props.id)
+}
+
 // --- meals ---
 const showMealForm = ref(false)
 const editingMealId = ref(null)
@@ -1191,7 +1196,12 @@ function flightLabel(f) {
               <button class="btn-icon-danger" aria-label="Delete place" title="Delete place" @click="removePoi(p.id)">×</button>
             </div>
           </div>
-          <PoiComments :trip-id="props.id" :poi-id="p.id" />
+          <PoiComments
+            :trip-id="props.id"
+            :poi-id="p.id"
+            :comments="p.comments || []"
+            @changed="reloadPois"
+          />
         </li>
       </ul>
     </section>

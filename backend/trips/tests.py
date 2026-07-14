@@ -454,6 +454,11 @@ class TripApiTests(APITestCase):
         self.assertFalse(listing.data[0]["is_mine"])
         self.assertTrue(listing.data[0]["replies"][0]["is_mine"])
 
+        # Comments also come nested in the POI list (single-request read path).
+        poi_list = self.client.get(f"/api/trips/{trip.id}/pois/")
+        self.assertEqual(len(poi_list.data[0]["comments"]), 1)
+        self.assertEqual(len(poi_list.data[0]["comments"][0]["replies"]), 1)
+
         # Bob cannot edit or delete Alice's comment.
         blocked = self.client.patch(
             f"{base}{cid}/", {"body": "hijack"}, format="json"

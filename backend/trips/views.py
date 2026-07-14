@@ -211,7 +211,9 @@ class PointOfInterestViewSet(TripScopedMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return self.get_trip().pois.prefetch_related("interested")
+        return self.get_trip().pois.prefetch_related(
+            "interested", "comments__author", "comments__replies__author"
+        )
 
     def toggle_interest(self, request, *args, **kwargs):
         poi = self.get_object()

@@ -131,6 +131,7 @@ class PointOfInterestSerializer(serializers.ModelSerializer):
     interested_count = serializers.SerializerMethodField()
     interested_names = serializers.SerializerMethodField()
     is_interested = serializers.SerializerMethodField()
+    comments = serializers.SerializerMethodField()
 
     class Meta:
         model = PointOfInterest
@@ -145,6 +146,7 @@ class PointOfInterestSerializer(serializers.ModelSerializer):
             "interested_count",
             "interested_names",
             "is_interested",
+            "comments",
             "created_at",
         ]
         read_only_fields = ["trip", "created_at"]
@@ -160,6 +162,12 @@ class PointOfInterestSerializer(serializers.ModelSerializer):
         if not request:
             return False
         return any(u.id == request.user.id for u in obj.interested.all())
+
+    def get_comments(self, obj):
+        # Top-level comments only; each carries its replies nested. Filter in
+        # Python so the prefetched `comments` cache is reused (no extra query).
+        top = [c for c in obj.comments.all() if c.parent_id is None]
+        return PoiCommentSerializer(top, many=True, context=self.context).data
 
 
 class PoiCommentSerializer(serializers.ModelSerializer):
