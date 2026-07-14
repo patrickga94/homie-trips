@@ -159,6 +159,7 @@ fly ssh console -C "python manage.py createsuperuser"
 | GET/POST · detail | `/api/trips/{id}/grocery/[{id}/]` | Grocery list items (checkable) |
 | GET/POST · detail | `/api/trips/{id}/pois/[{id}/]` | Points of interest |
 | POST | `/api/trips/{id}/pois/{id}/toggle_interest/` | Toggle the current user's interest |
+| GET/POST · detail | `/api/trips/{id}/pois/{poi}/comments/[{id}/]` | POI comments & replies (edit/delete author-only) |
 
 All trip-scoped endpoints require authentication and trip membership.
 

@@ -260,6 +260,37 @@ class PointOfInterest(models.Model):
         return self.name
 
 
+class PointOfInterestComment(models.Model):
+    """A comment on a point of interest, or a reply to another comment.
+
+    Only one level of nesting: replies point at a top-level comment (their
+    own `parent` is always null). Only the author may edit or delete it.
+    """
+
+    poi = models.ForeignKey(
+        PointOfInterest, on_delete=models.CASCADE, related_name="comments"
+    )
+    author = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="poi_comments"
+    )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="replies",
+    )
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self):
+        return f"Comment by {self.author} on {self.poi}"
+
+
 class FlightTraveler(models.Model):
     """Through model: one traveler's booking details on a shared flight."""
 

@@ -13,6 +13,7 @@ from .models import (
     ItineraryItem,
     Meal,
     PointOfInterest,
+    PointOfInterestComment,
     RentalVehicle,
     Trip,
     TripMembership,
@@ -159,6 +160,51 @@ class PointOfInterestSerializer(serializers.ModelSerializer):
         if not request:
             return False
         return any(u.id == request.user.id for u in obj.interested.all())
+
+
+class PoiCommentSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source="author.name", read_only=True)
+    is_mine = serializers.SerializerMethodField()
+    replies = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PointOfInterestComment
+        fields = [
+            "id",
+            "poi",
+            "parent",
+            "author_name",
+            "is_mine",
+            "body",
+            "replies",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["poi", "created_at", "updated_at"]
+
+    def get_is_mine(self, obj):
+        request = self.context.get("request")
+        return bool(request and obj.author_id == request.user.id)
+
+    def get_replies(self, obj):
+        # Replies are only nested under a top-level comment (one level deep).
+        if obj.parent_id is not None:
+            return []
+        return PoiCommentSerializer(
+            obj.replies.all(), many=True, context=self.context
+        ).data
+
+    def validate_parent(self, value):
+        if value is None:
+            return value
+        poi = self.context.get("poi")
+        if poi is not None and value.poi_id != poi.id:
+            raise serializers.ValidationError(
+                "Reply must be on the same place of interest."
+            )
+        if value.parent_id is not None:
+            raise serializers.ValidationError("Cannot reply to a reply.")
+        return value
 
 
 class GroceryItemSerializer(serializers.ModelSerializer):

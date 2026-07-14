@@ -17,7 +17,7 @@ from .models import (
     Trip,
     TripMembership,
 )
-from .permissions import IsTripMember, IsTripOwner
+from .permissions import IsCommentAuthor, IsTripMember, IsTripOwner
 from .serializers import (
     AccommodationSerializer,
     AddMemberSerializer,
@@ -27,6 +27,7 @@ from .serializers import (
     ItineraryItemSerializer,
     MealSerializer,
     MembershipSerializer,
+    PoiCommentSerializer,
     PointOfInterestSerializer,
     RentalVehicleSerializer,
     TripListSerializer,
@@ -219,6 +220,39 @@ class PointOfInterestViewSet(TripScopedMixin, viewsets.ModelViewSet):
         else:
             poi.interested.add(request.user)
         return Response(self.get_serializer(poi).data)
+
+
+class PoiCommentViewSet(TripScopedMixin, viewsets.ModelViewSet):
+    serializer_class = PoiCommentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_poi(self):
+        if not hasattr(self, "_poi"):
+            self._poi = get_object_or_404(self.get_trip().pois, pk=self.kwargs["poi_pk"])
+        return self._poi
+
+    def get_queryset(self):
+        qs = self.get_poi().comments.select_related("author").prefetch_related(
+            "replies__author"
+        )
+        # The list is top-level comments only; each carries its replies nested
+        # in the serializer. Detail actions (edit/delete) must reach replies too.
+        if self.action == "list":
+            return qs.filter(parent__isnull=True)
+        return qs
+
+    def get_permissions(self):
+        if self.action in ("update", "partial_update", "destroy"):
+            return [IsAuthenticated(), IsCommentAuthor()]
+        return super().get_permissions()
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["poi"] = self.get_poi()
+        return context
+
+    def perform_create(self, serializer):
+        serializer.save(poi=self.get_poi(), author=self.request.user)
 
 
 class MealViewSet(TripScopedMixin, viewsets.ModelViewSet):

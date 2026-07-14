@@ -5,7 +5,14 @@ from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import Accommodation, Flight, Invitation, Trip, TripMembership
+from .models import (
+    Accommodation,
+    Flight,
+    Invitation,
+    PointOfInterest,
+    Trip,
+    TripMembership,
+)
 from .services import fetch_og_image
 
 User = get_user_model()
@@ -410,6 +417,81 @@ class TripApiTests(APITestCase):
         off = self.client.post(f"/api/trips/{trip.id}/pois/{poi_id}/toggle_interest/")
         self.assertEqual(off.data["interested_count"], 0)
         self.assertFalse(off.data["is_interested"])
+
+    def test_poi_comments_replies_and_author_only_edits(self):
+        trip = Trip.objects.create(name="Explore", created_by=self.alice)
+        TripMembership.objects.create(trip=trip, user=self.alice, role="owner")
+        TripMembership.objects.create(trip=trip, user=self.bob, role="member")
+        self.client.force_login(self.alice)
+        poi = self.client.post(
+            f"/api/trips/{trip.id}/pois/",
+            {"name": "Taco Stand", "category": "restaurant"},
+            format="json",
+        ).data
+        base = f"/api/trips/{trip.id}/pois/{poi['id']}/comments/"
+
+        # Alice posts a top-level comment.
+        comment = self.client.post(base, {"body": "Looks great"}, format="json")
+        self.assertEqual(comment.status_code, status.HTTP_201_CREATED, comment.data)
+        cid = comment.data["id"]
+        self.assertEqual(comment.data["author_name"], self.alice.name)
+        self.assertTrue(comment.data["is_mine"])
+
+        # Bob replies to it.
+        self.client.force_login(self.bob)
+        reply = self.client.post(
+            base, {"body": "Agreed", "parent": cid}, format="json"
+        )
+        self.assertEqual(reply.status_code, status.HTTP_201_CREATED, reply.data)
+        rid = reply.data["id"]
+
+        # Listing returns top-level comments with replies nested.
+        listing = self.client.get(base)
+        self.assertEqual(len(listing.data), 1)
+        self.assertEqual(len(listing.data[0]["replies"]), 1)
+        self.assertEqual(listing.data[0]["replies"][0]["author_name"], self.bob.name)
+        # is_mine reflects the requester (Bob sees Alice's comment as not his).
+        self.assertFalse(listing.data[0]["is_mine"])
+        self.assertTrue(listing.data[0]["replies"][0]["is_mine"])
+
+        # Bob cannot edit or delete Alice's comment.
+        blocked = self.client.patch(
+            f"{base}{cid}/", {"body": "hijack"}, format="json"
+        )
+        self.assertEqual(blocked.status_code, status.HTTP_403_FORBIDDEN)
+        blocked_del = self.client.delete(f"{base}{cid}/")
+        self.assertEqual(blocked_del.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Bob can edit his own reply.
+        edited = self.client.patch(
+            f"{base}{rid}/", {"body": "Totally agreed"}, format="json"
+        )
+        self.assertEqual(edited.status_code, status.HTTP_200_OK)
+        self.assertEqual(edited.data["body"], "Totally agreed")
+
+        # You cannot reply to a reply (only one level of nesting).
+        nested = self.client.post(
+            base, {"body": "nope", "parent": rid}, format="json"
+        )
+        self.assertEqual(nested.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Alice deletes her comment; its reply cascades away.
+        self.client.force_login(self.alice)
+        deleted = self.client.delete(f"{base}{cid}/")
+        self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(len(self.client.get(base).data), 0)
+
+    def test_non_member_cannot_comment_on_poi(self):
+        trip = Trip.objects.create(name="Explore", created_by=self.alice)
+        TripMembership.objects.create(trip=trip, user=self.alice, role="owner")
+        poi = PointOfInterest.objects.create(trip=trip, name="Taco Stand")
+        self.client.force_login(self.bob)
+        resp = self.client.post(
+            f"/api/trips/{trip.id}/pois/{poi.id}/comments/",
+            {"body": "sneaky"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_authentication_required(self):
         resp = self.client.get("/api/trips/")

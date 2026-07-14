@@ -9,6 +9,7 @@ from .models import (
     ItineraryItem,
     Meal,
     PointOfInterest,
+    PointOfInterestComment,
     RentalVehicle,
     Trip,
     TripMembership,
@@ -61,6 +62,13 @@ class PointOfInterestAdmin(admin.ModelAdmin):
     list_filter = ["trip", "category"]
     search_fields = ["name", "address"]
     autocomplete_fields = ["interested"]
+
+
+@admin.register(PointOfInterestComment)
+class PointOfInterestCommentAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "author", "parent", "created_at"]
+    list_filter = ["poi__trip"]
+    search_fields = ["body"]
 
 
 @admin.register(GroceryItem)

@@ -20,6 +20,15 @@ class IsTripMember(permissions.BasePermission):
         ).exists()
 
 
+class IsCommentAuthor(permissions.BasePermission):
+    """Only the comment's author may edit or delete it."""
+
+    message = "You can only edit or delete your own comments."
+
+    def has_object_permission(self, request, view, obj):
+        return obj.author_id == request.user.id
+
+
 class IsTripOwner(permissions.BasePermission):
     """Allow only trip owners (used for destructive trip-level actions)."""
 

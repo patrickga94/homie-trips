@@ -200,6 +200,29 @@ export const useTripsStore = defineStore('trips', () => {
     return data
   }
 
+  // --- points of interest: comments ---
+  async function fetchPoiComments(tripId, poiId) {
+    const { data } = await client.get(`/trips/${tripId}/pois/${poiId}/comments/`)
+    return Array.isArray(data) ? data : data.results
+  }
+
+  async function createPoiComment(tripId, poiId, payload) {
+    const { data } = await client.post(`/trips/${tripId}/pois/${poiId}/comments/`, payload)
+    return data
+  }
+
+  async function updatePoiComment(tripId, poiId, commentId, payload) {
+    const { data } = await client.patch(
+      `/trips/${tripId}/pois/${poiId}/comments/${commentId}/`,
+      payload,
+    )
+    return data
+  }
+
+  async function deletePoiComment(tripId, poiId, commentId) {
+    await client.delete(`/trips/${tripId}/pois/${poiId}/comments/${commentId}/`)
+  }
+
   return {
     trips,
     loading,
@@ -241,5 +264,9 @@ export const useTripsStore = defineStore('trips', () => {
     updatePoi,
     deletePoi,
     togglePoiInterest,
+    fetchPoiComments,
+    createPoiComment,
+    updatePoiComment,
+    deletePoiComment,
   }
 })

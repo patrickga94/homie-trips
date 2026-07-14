@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/auth'
 import AirportPicker from '../components/AirportPicker.vue'
 import ClampText from '../components/ClampText.vue'
 import Accordion from '../components/Accordion.vue'
+import PoiComments from '../components/PoiComments.vue'
 import yhoshuaImg from '../assets/yhoshua.jpeg'
 
 const props = defineProps({ id: { type: [String, Number], required: true } })
@@ -1190,6 +1191,7 @@ function flightLabel(f) {
               <button class="btn-icon-danger" aria-label="Delete place" title="Delete place" @click="removePoi(p.id)">×</button>
             </div>
           </div>
+          <PoiComments :trip-id="props.id" :poi-id="p.id" />
         </li>
       </ul>
     </section>
