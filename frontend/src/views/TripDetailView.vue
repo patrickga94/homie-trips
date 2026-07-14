@@ -154,7 +154,7 @@ const flightSummary = computed(() => {
   })
   const arrivalKey = (p) => {
     const times = p.arrivals
-      .map((f) => f.departure_time)
+      .map((f) => f.arrival_time)
       .filter(Boolean)
       .map((t) => new Date(t).getTime())
     return times.length ? Math.min(...times) : Infinity
@@ -822,7 +822,7 @@ function flightLabel(f) {
     f.departure_airport && f.arrival_airport
       ? `${f.departure_airport}→${f.arrival_airport}`
       : ''
-  const when = f.departure_time ? fmt(f.departure_time) : ''
+  const when = f.direction == 'arrival' ? f.arrival_time ? fmt(f.arrival_time) : '' : f.direction == 'departure' ? f.departure_time ? fmt(f.departure_time)  : '' : ''
   return [airline, route, when].filter(Boolean).join(' · ') || 'flight added'
 }
 </script>
